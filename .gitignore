@@ -1,0 +1,19 @@
+.env
+.env.*
+!.env.example
+.nuxt
+.nitro
+.cache
+.output
+dist
+dist-ssr
+node_modules
+*.log*
+.DS_Store
+.fleet
+.idea
+.vscode
+*.local
+
+# Firebase service account
+scripts/service-account.json
