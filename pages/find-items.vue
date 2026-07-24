@@ -52,18 +52,25 @@
               <div class="shop-distance" v-if="item.distance !== null">{{ item.distance.toFixed(1) }} km away</div>
               <div class="shop-address">{{ item.shopName }} &middot; {{ item.category || 'General' }}</div>
             </div>
-            <NuxtLink :to="`/dashboard`" class="shop-link" @click.stop>View</NuxtLink>
+            <NuxtLink :to="`/items/${item.id}`" class="shop-link" @click.stop>View</NuxtLink>
           </div>
         </div>
       </div>
       <div class="map-frame">
         <ClientOnly fallback="Loading map...">
-          <GoogleMap v-if="apiKey" :api-key="apiKey" :center="center" :zoom="zoom" style="width: 100%; height: 100%" :map-id="mapId || undefined">
-            <AdvancedMarker :options="{ position: { lat: lat, lng: lng }, title: 'Your Location' }">
-              <InfoWindow :options="{ headerContent: 'You are here' }" v-model="showInfo"><div class="iw-content">Your current location</div></InfoWindow>
+          <GoogleMap ref="mapRef" v-if="apiKey" :api-key="apiKey" :center="center" :zoom="zoom" style="width: 100%; height: 100%" :map-id="mapId || undefined" :libraries="['marker', 'routes']">
+            <AdvancedMarker :options="getLocationMarkerOptions()">
+              <InfoWindow :options="{ headerContent: 'You are here', disableAutoPan: false }" v-model="showInfo"><div class="iw-content">Your current location</div></InfoWindow>
             </AdvancedMarker>
-            <AdvancedMarker v-for="item in filteredItems" :key="item.id" :options="{ position: { lat: item.latitude, lng: item.longitude }, title: item.name }" @click="selectItem(item)">
-              <InfoWindow v-if="selectedItem?.id === item.id" :options="{ headerContent: item.name }" @close="selectedItem = null"><div class="iw-content">{{ item.name }} at {{ item.shopName }}<br><small>{{ item.distance?.toFixed(1) }} km away</small></div></InfoWindow>
+            <AdvancedMarker v-for="item in filteredItems" :key="item.id" :options="getStoreMarkerOptions(item)" @click="focusItem(item)">
+              <InfoWindow v-if="selectedItem?.id === item.id" :options="{ headerContent: '&nbsp;&nbsp;&nbsp;' + item.shopName, disableAutoPan: false, closeButton: true }" @close="selectedItem = null">
+                <div class="iw-content">
+                  <div class="iw-header"><strong>{{ item.shopName }}</strong></div>
+                  <div class="iw-name">{{ item.name }}</div>
+                  <div class="iw-dist"><small>{{ item.distance.toFixed(1) }} km away</small></div>
+                  <NuxtLink :to="`/items/${item.id}`" class="shop-link" @click.stop>View Product</NuxtLink>
+                </div>
+              </InfoWindow>
             </AdvancedMarker>
           </GoogleMap>
           <div v-else class="map-placeholder">Add a Google Maps API key in your environment to view the map.</div>
@@ -75,7 +82,8 @@
 
 <script setup lang="ts">
 import { GoogleMap, AdvancedMarker, InfoWindow } from 'vue3-google-map';
-import type { Product } from '~/types';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import type { Product, Shop } from '~/types';
 
 useHead({
   title: 'Find Nearby Items | My Near Shops',
@@ -87,63 +95,182 @@ useHead({
 const config = useRuntimeConfig().public;
 const apiKey = config.googleMapsApiKey;
 const mapId = config.googleMapsId;
+const nuxtApp = useNuxtApp() as any;
+
+type ResultItem = Product & { distance: number; shopName: string; storeLatitude: number; storeLongitude: number };
+
 const lat = ref(14.609);
 const lng = ref(120.994);
+const userLat = ref(14.609);
+const userLng = ref(120.994);
 const zoom = ref(15);
 const showInfo = ref(true);
-const selectedItem = ref<(Product & { distance: number | null }) | null>(null);
+const selectedItem = ref<ResultItem | null>(null);
 const searchText = ref('');
 const radius = ref(5);
 
+const mapRef = ref<{ $mapObject?: any; map?: any; $map?: any } | null>(null);
+const directions = ref<any>(null);
+const directionsRenderer = ref<any>(null);
+
 const center = computed(() => ({ lat: lat.value, lng: lng.value }));
 
-const allItems: (Product & { shopName: string; distance: number | null })[] = [
-  { id: 'i1', shopId: '1', shopName: 'Fresh Mart', name: 'Fresh Milk', category: 'Groceries', price: 85, latitude: 14.61, longitude: 120.995, images: [], distance: null },
-  { id: 'i2', shopId: '1', shopName: 'Fresh Mart', name: 'White Bread', category: 'Bakery', price: 55, latitude: 14.6105, longitude: 120.9952, images: [], distance: null },
-  { id: 'i3', shopId: '2', shopName: 'Bakery Corner', name: 'Sourdough Loaf', category: 'Bakery', price: 120, latitude: 14.607, longitude: 120.99, images: [], distance: null },
-  { id: 'i4', shopId: '2', shopName: 'Bakery Corner', name: 'Croissant', category: 'Bakery', price: 75, latitude: 14.6072, longitude: 120.9905, images: [], distance: null },
-  { id: 'i5', shopId: '3', shopName: 'Green Grocers', name: 'Organic Eggs', category: 'Produce', price: 110, latitude: 14.615, longitude: 120.992, images: [], distance: null },
-  { id: 'i6', shopId: '5', shopName: 'Pet Supplies Plus', name: 'Dog Food', category: 'Pets', price: 320, latitude: 14.605, longitude: 120.985, images: [], distance: null },
-];
-
-const items = ref([...allItems]);
+const items = ref<ResultItem[]>([]);
 
 const filteredItems = computed(() => {
-  const q = searchText.value.toLowerCase();
-  return items.value.filter((i) => {
-    const within = i.distance !== null && i.distance <= radius.value;
-    const matches = i.name.toLowerCase().includes(q) || i.shopName.toLowerCase().includes(q) || (i.category || '').toLowerCase().includes(q);
-    return within && matches;
-  });
+  const q = searchText.value.toLowerCase().trim();
+  return items.value
+    .filter((i: ResultItem) => i.distance <= radius.value)
+    .filter((i: ResultItem) => i.name.toLowerCase().includes(q) || i.shopName.toLowerCase().includes(q) || (i.category || '').toLowerCase().includes(q))
+    .sort((a: ResultItem, b: ResultItem) => a.distance - b.distance);
 });
 
 const getLocation = () => {
   if (process.client && navigator.geolocation) {
     navigator.geolocation.getCurrentPosition((position) => {
+      userLat.value = position.coords.latitude;
+      userLng.value = position.coords.longitude;
       lat.value = position.coords.latitude;
       lng.value = position.coords.longitude;
     }, () => {});
   }
 };
 
-const search = () => {
-  if (!searchText.value.trim()) return;
+const search = async () => {
+  if (!process.client || !nuxtApp.$firebase?.db || !searchText.value.trim()) return;
   getLocation();
-  items.value = allItems.map((i) => {
-    const d = getDistance(lat.value, lng.value, i.latitude, i.longitude);
-    return { ...i, distance: d };
-  });
+  const db = nuxtApp.$firebase.db;
+  const q = searchText.value.toLowerCase().trim();
+  const shopsSnap = await getDocs(collection(db, 'shops'));
+  const results: ResultItem[] = [];
+  for (const shopDoc of shopsSnap.docs) {
+    const shop = { id: shopDoc.id, ...shopDoc.data() } as Shop;
+    const d = getDistance(userLat.value, userLng.value, shop.latitude, shop.longitude);
+    if (d > radius.value) continue;
+    const productsQuery = query(collection(db, 'products'), where('shopId', '==', shop.id));
+    const productsSnap = await getDocs(productsQuery);
+    const matchedDoc = productsSnap.docs.find((p) => {
+      const data = p.data() as Product;
+      return data.name?.toLowerCase().includes(q) || (data.category || '').toLowerCase().includes(q);
+    });
+    if (matchedDoc) {
+      const product = { id: matchedDoc.id, ...matchedDoc.data() } as Product;
+      results.push({ ...product, distance: d, shopName: shop.name, storeLatitude: shop.latitude, storeLongitude: shop.longitude });
+    }
+  }
+  results.sort((a, b) => a.distance - b.distance);
+  items.value = results;
 };
 
-const focusItem = (item: Product & { distance: number | null; shopName: string }) => {
-  lat.value = item.latitude;
-  lng.value = item.longitude;
-  selectedItem.value = item as any;
+const focusItem = (item: ResultItem) => {
+  lat.value = item.storeLatitude;
+  lng.value = item.storeLongitude;
+  selectedItem.value = item;
   zoom.value = 17;
+  requestDirections(item);
 };
 
-const selectItem = (item: Product & { distance: number | null; shopName: string }) => {
-  selectedItem.value = item as any;
+const selectItem = (item: ResultItem) => {
+  selectedItem.value = item;
+};
+
+const setupDirectionsRenderer = (map: any) => {
+  if (typeof window === 'undefined' || !(window as any).google?.maps?.DirectionsRenderer) {
+    return;
+  }
+  if (directionsRenderer.value) {
+    directionsRenderer.value.setMap(null);
+  }
+  directionsRenderer.value = new (window as any).google.maps.DirectionsRenderer({
+    suppressMarkers: true,
+    polylineOptions: { strokeColor: '#4285F4', strokeWeight: 5 },
+  });
+  directionsRenderer.value.setMap(map);
+  if (directions.value) {
+    directionsRenderer.value.setDirections(directions.value);
+  }
+};
+
+const requestDirections = (item: ResultItem) => {
+  if (typeof window === 'undefined' || !(window as any).google?.maps?.DirectionsService) {
+    return;
+  }
+  const directionsService = new (window as any).google.maps.DirectionsService();
+  directionsService.route(
+    {
+      origin: { lat: userLat.value, lng: userLng.value },
+      destination: { lat: item.storeLatitude, lng: item.storeLongitude },
+      travelMode: 'DRIVING',
+    },
+    (result: any, status: any) => {
+      if (status === 'OK' && result) {
+        directions.value = result;
+      } else {
+        console.error('Error fetching directions:', status);
+      }
+    }
+  );
+};
+
+watch(() => directions.value, (newDirections: any) => {
+  if (newDirections) {
+    const map = mapRef.value?.$mapObject || mapRef.value?.map || mapRef.value?.$map;
+    if (map) {
+      setupDirectionsRenderer(map);
+    }
+  }
+});
+
+const createLocationMarkerElement = (): HTMLElement => {
+  if (typeof document === 'undefined') {
+    return {} as HTMLElement;
+  }
+  const markerDiv = document.createElement('div');
+  markerDiv.className = 'custom-marker location-marker';
+  markerDiv.innerHTML = `
+    <div class="marker-pulse"></div>
+    <div class="marker-icon">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#FFFFFF"/>
+      </svg>
+    </div>
+  `;
+  return markerDiv;
+};
+
+const createStoreMarkerElement = (): HTMLElement => {
+  if (typeof document === 'undefined') {
+    return {} as HTMLElement;
+  }
+  const markerDiv = document.createElement('div');
+  markerDiv.className = 'custom-marker store-marker';
+  markerDiv.innerHTML = `
+    <div class="marker-pulse"></div>
+    <div class="marker-icon">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z" fill="#FFFFFF"/>
+      </svg>
+    </div>
+  `;
+  return markerDiv;
+};
+
+const getLocationMarkerOptions = () => {
+  return {
+    position: { lat: userLat.value, lng: userLng.value },
+    gmpDraggable: false,
+    title: 'Your Location',
+    content: createLocationMarkerElement(),
+  };
+};
+
+const getStoreMarkerOptions = (item: ResultItem) => {
+  return {
+    position: { lat: item.storeLatitude, lng: item.storeLongitude },
+    gmpDraggable: false,
+    title: item.shopName,
+    content: createStoreMarkerElement(),
+  };
 };
 
 onMounted(() => {
@@ -224,4 +351,20 @@ onMounted(() => {
   .shops-list { height: auto; max-height: 400px; border-right: none; border-bottom: 1px solid var(--gray-200); }
   .map-frame { min-height: 400px; }
 }
+
+:deep(.custom-marker) { position: relative; width: 25px; height: 25px; cursor: pointer; transform-origin: center bottom; animation: markerBounce 2s ease-in-out infinite; }
+:deep(.marker-icon) { position: relative; width: 25px; height: 25px; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 2; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); transition: transform 0.3s ease; }
+:deep(.marker-icon svg) { width: 15px; height: 15px; }
+:deep(.location-marker .marker-icon) { background: linear-gradient(135deg, #FBBC04 0%, #F57F17 100%); border: 3px solid #FFFFFF; }
+:deep(.store-marker .marker-icon) { background: linear-gradient(135deg, #34A853 0%, #2E7D32 100%); border: 3px solid #FFFFFF; }
+:deep(.marker-pulse) { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 48px; height: 48px; border-radius: 50%; z-index: 1; animation: markerPulse 2s ease-out infinite; }
+:deep(.location-marker .marker-pulse) { background: rgba(251, 188, 4, 0.4); border: 2px solid rgba(251, 188, 4, 0.6); }
+:deep(.store-marker .marker-pulse) { background: rgba(52, 168, 83, 0.4); border: 2px solid rgba(52, 168, 83, 0.6); }
+:deep(.custom-marker:hover .marker-icon) { transform: scale(1.15); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4); }
+@keyframes markerBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes markerPulse { 0% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(2); opacity: 0; } }
+
+.iw-header { font-size: 14px; margin-bottom: 2px; }
+.iw-name { font-weight: 700; color: var(--gray-900); margin-bottom: 4px; }
+.iw-dist { font-size: 12px; color: var(--gray-500); margin-bottom: 6px; }
 </style>

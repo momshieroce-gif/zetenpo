@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { doc, getDoc } from 'firebase/firestore';
-import { ref, computed, watch } from 'vue';
+import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { ref, computed, watch, onMounted } from 'vue';
 
-const { cart, cartCount, removeFromCart } = useCart();
+const { cart, cartCount, removeFromCart, deliveryMethod, paymentMethod } = useCart();
 const nuxtApp = useNuxtApp() as any;
 const shopNames = ref<Record<string, string>>({});
 const firstShopLink = computed(() => cart.value.length ? `/shops/${cart.value[0].product.shopId}` : '/find-shops');
@@ -10,6 +10,21 @@ const firstShopLink = computed(() => cart.value.length ? `/shops/${cart.value[0]
 const total = computed(() => cart.value.reduce((sum, item) => sum + Number(item.product.price || 0) * item.qty, 0));
 
 const uniqueShopIds = computed(() => [...new Set(cart.value.map((item) => item.product.shopId).filter(Boolean))]);
+
+const deliveryMethods = ref<any[]>([]);
+const paymentMethods = ref<any[]>([]);
+
+const fetchDeliveryMethods = async () => {
+  if (!process.client || !nuxtApp.$firebase?.db) return;
+  const snap = await getDocs(collection(nuxtApp.$firebase.db, 'delivery_methods'));
+  deliveryMethods.value = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+};
+
+const fetchPaymentMethods = async () => {
+  if (!process.client || !nuxtApp.$firebase?.db) return;
+  const snap = await getDocs(collection(nuxtApp.$firebase.db, 'payment_methods'));
+  paymentMethods.value = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+};
 
 const fetchShopNames = async () => {
   if (!process.client || !nuxtApp.$firebase?.db) return;
@@ -24,6 +39,11 @@ const fetchShopNames = async () => {
 };
 
 watch(uniqueShopIds, fetchShopNames, { immediate: true });
+
+onMounted(() => {
+  fetchDeliveryMethods();
+  fetchPaymentMethods();
+});
 
 useHead({
   title: 'Cart | My Near Shops',
@@ -90,6 +110,37 @@ useHead({
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"/></svg>
               Order Summary
             </div>
+
+            <div class="option-card">
+              <div class="option-card-header">
+                <div class="option-icon-wrap">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M18 18H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2zm0-12H6v10h12V6z" fill="#fff"/></svg>
+                </div>
+                <span class="option-card-title">Delivery Method</span>
+              </div>
+              <div class="option-radio-list">
+                <label v-for="method in deliveryMethods" :key="method.id" class="option-radio-row" :class="{ active: deliveryMethod === method.slug }">
+                  <input v-model="deliveryMethod" type="radio" :value="method.slug" class="option-radio-input" />
+                  <span class="option-radio-label">{{ method.name }}</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="option-card">
+              <div class="option-card-header">
+                <div class="option-icon-wrap">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z" fill="#fff"/></svg>
+                </div>
+                <span class="option-card-title">Payment Method</span>
+              </div>
+              <div class="option-radio-list">
+                <label v-for="method in paymentMethods" :key="method.id" class="option-radio-row" :class="{ active: paymentMethod === method.slug }">
+                  <input v-model="paymentMethod" type="radio" :value="method.slug" class="option-radio-input" />
+                  <span class="option-radio-label">{{ method.name }}</span>
+                </label>
+              </div>
+            </div>
+
             <div class="summary-row">
               <span>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zm10 0c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2zM7.82 14l-.76-3.18H3c-1.1 0-2-.9-2-2 0-.56.23-1.06.59-1.42L5.29 5.71l.71-2.12h13l-.65 1.93c.47.28.82.8.82 1.41 0 .94-.76 1.7-1.7 1.7h-.55l-.62 2.62H7.82zM6.16 8h11.15l-1.09-2.5H7.41L6.16 8z" fill="currentColor"/></svg>
@@ -101,10 +152,10 @@ useHead({
               <span>Total</span>
               <span>₱{{ total.toFixed(2) }}</span>
             </div>
-            <button class="checkout-btn">
+            <NuxtLink to="/checkout" class="checkout-btn">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="currentColor"/></svg>
               Checkout
-            </button>
+            </NuxtLink>
           </div>
         </div>
       </div>
@@ -385,6 +436,71 @@ useHead({
   height: fit-content;
   position: sticky;
   top: 88px;
+}
+
+.option-card {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.option-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: #fff;
+}
+
+.option-icon-wrap {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.option-card-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.option-radio-list {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.option-radio-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.option-radio-row.active {
+  border-color: #7c3aed;
+  background: #ede9fe;
+}
+
+.option-radio-input {
+  accent-color: #7c3aed;
+  cursor: pointer;
+}
+
+.option-radio-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
 }
 
 .summary-title {

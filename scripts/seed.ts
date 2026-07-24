@@ -1,6 +1,7 @@
 import admin from 'firebase-admin';
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
+import { createHash } from 'crypto';
 
 const serviceAccountPath = resolve(process.cwd(), 'scripts/service-account.json');
 
@@ -19,6 +20,8 @@ const db = admin.firestore();
 const FieldValue = admin.firestore.FieldValue;
 
 const now = () => FieldValue.serverTimestamp();
+const DEMO_PASSWORD = 'demo12345';
+const hashPassword = (password: string) => createHash('sha256').update(password).digest('hex');
 
 async function deleteCollectionInBatches(path: string, batchSize = 500) {
   const collectionRef = db.collection(path);
@@ -50,7 +53,7 @@ async function resetCollections(paths: string[]) {
 }
 
 async function seed() {
-  await resetCollections(['roles', 'users', 'shops', 'products']);
+  await resetCollections(['roles', 'users', 'shops', 'products', 'delivery_charge', 'delivery_methods', 'payment_methods', 'transactions']);
 
   console.log('Starting Firestore seed...');
 
@@ -98,7 +101,8 @@ async function seed() {
     {
       id: superAdminId,
       name: 'Seed Super Admin',
-      email: 'admin@mynearshops.local',
+      email: 'demo@mynearshops.local',
+      password_hash: hashPassword(DEMO_PASSWORD),
       phone: '+1234567890',
       roleId: 'super-admin',
       role: 'Super Admin',
@@ -198,6 +202,96 @@ async function seed() {
     await batch.commit();
   }
   console.log(`Seeded ${totalProducts} products.`);
+
+  // --- Delivery Charges ---
+  const deliveryCharges = [];
+  for (const shop of shops) {
+    deliveryCharges.push({
+      store_id: shop.id,
+      standard_delivery_charge: parseFloat((Math.random() * 30 + 50).toFixed(2)),
+      amount_per_km: parseFloat((Math.random() * 10 + 5).toFixed(2)),
+    });
+  }
+
+  for (const charge of deliveryCharges) {
+    const docRef = db.collection('delivery_charge').doc();
+    await docRef.set({ ...charge, createdAt: now(), updatedAt: now() });
+  }
+  console.log(`Seeded ${deliveryCharges.length} delivery charges.`);
+
+  // --- Delivery Methods ---
+  const deliveryMethods = [
+    { name: 'Pickup from the store', slug: 'pickup', description: 'Pick up your order at the store.', is_active: true, sort_order: 1 },
+    { name: 'Deliver to your location', slug: 'delivery', description: 'We deliver the order to your address.', is_active: true, sort_order: 2 },
+  ];
+
+  for (const method of deliveryMethods) {
+    const docRef = db.collection('delivery_methods').doc();
+    await docRef.set({ ...method, createdAt: now(), updatedAt: now() });
+  }
+  console.log(`Seeded ${deliveryMethods.length} delivery methods.`);
+
+  // --- Payment Methods ---
+  const paymentMethods = [
+    { name: 'Cash', slug: 'cash', description: 'Pay with cash upon delivery or pickup.', is_active: true, sort_order: 1 },
+    { name: 'Gcash', slug: 'gcash', description: 'Pay via GCash.', is_active: true, sort_order: 2 },
+    { name: 'Bank Transfer', slug: 'bank-transfer', description: 'Transfer to our bank account.', is_active: true, sort_order: 3 },
+  ];
+
+  for (const method of paymentMethods) {
+    const docRef = db.collection('payment_methods').doc();
+    await docRef.set({ ...method, createdAt: now(), updatedAt: now() });
+  }
+  console.log(`Seeded ${paymentMethods.length} payment methods.`);
+
+  // --- Transactions ---
+  const TRANSACTIONS_COUNT = 10;
+  const transactions = [];
+  for (let i = 0; i < Math.min(TRANSACTIONS_COUNT, shops.length); i++) {
+    const shop = shops[i];
+    const user = users[0];
+    const orderItems = [];
+    const itemCount = Math.floor(Math.random() * 2) + 1;
+    for (let j = 0; j < itemCount; j++) {
+      const price = parseFloat((Math.random() * 490 + 9.99).toFixed(2));
+      const qty = Math.floor(Math.random() * 3) + 1;
+      orderItems.push({
+        product_id: db.collection('products').doc().id,
+        shop_id: shop.id,
+        name: `Sample Product ${j + 1}`,
+        price,
+        qty,
+        subtotal: parseFloat((price * qty).toFixed(2)),
+      });
+    }
+    const subtotal = parseFloat(orderItems.reduce((sum, item) => sum + item.subtotal, 0).toFixed(2));
+    const isPickup = Math.random() > 0.5;
+    const deliveryCharge = isPickup ? 0 : parseFloat((Math.random() * 50 + 50).toFixed(2));
+    const total = parseFloat((subtotal + deliveryCharge).toFixed(2));
+    transactions.push({
+      order_number: `TRX-${Date.now().toString().slice(-6)}-${i + 1}`,
+      user_id: user.id,
+      store_id: shop.id,
+      user_location: { latitude: user.latitude, longitude: user.longitude },
+      store_location: { latitude: shop.latitude, longitude: shop.longitude },
+      delivery_location: { latitude: user.latitude, longitude: user.longitude, address: user.address },
+      delivery_method: isPickup ? 'pickup' : 'delivery',
+      payment_method: ['cash', 'gcash', 'bank-transfer'][Math.floor(Math.random() * 3)],
+      items: orderItems,
+      subtotal,
+      delivery_charge: deliveryCharge,
+      total,
+      customer_mobile: user.phone,
+      customer_note: isPickup ? 'I will pick up after 5 PM.' : 'Please deliver to the front desk.',
+      status: 'pending',
+    });
+  }
+
+  for (const transaction of transactions) {
+    const docRef = db.collection('transactions').doc();
+    await docRef.set({ ...transaction, createdAt: now(), updatedAt: now() });
+  }
+  console.log(`Seeded ${transactions.length} transactions.`);
 
   console.log('Firestore seed completed successfully.');
 }
