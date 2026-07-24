@@ -190,7 +190,7 @@ async function seed() {
       });
       batchCount++;
       totalProducts++;
-      if (batchCount === 500) {
+      if (batchCount === 10) {
         await batch.commit();
         batch = db.batch();
         batchCount = 0;
