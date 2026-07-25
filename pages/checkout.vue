@@ -63,12 +63,10 @@
                   <GoogleMap v-if="apiKey" ref="mapRef" :api-key="apiKey" :map-id="mapId || undefined" class="checkout-map" :center="mapCenter" :zoom="currentZoom" :disable-default-ui="false" :draggable="true" :clickable-icons="false" :libraries="['places', 'marker', 'routes']">
                     <AdvancedMarker :options="userMarkerOptions">
                       <InfoWindow v-model="showUserInfo" :options="{ headerContent: 'You are here', disableAutoPan: false }">
-                        <div class="iw-content">Your current location</div>
                       </InfoWindow>
                     </AdvancedMarker>
                     <AdvancedMarker v-if="shop" :options="storeMarkerOptions">
                       <InfoWindow v-model="showStoreInfo" :options="{ headerContent: shop.name, disableAutoPan: false }">
-                        <div class="iw-content">{{ shop.name }}</div>
                       </InfoWindow>
                     </AdvancedMarker>
                   </GoogleMap>
@@ -152,7 +150,7 @@
 
 <script setup lang="ts">
 import { GoogleMap, AdvancedMarker, InfoWindow } from 'vue3-google-map';
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import type { Shop } from '~/types';
 
@@ -305,7 +303,7 @@ const clearSearch = () => {
 };
 
 const drawRoute = () => {
-  if (!process.client || !shop.value || searchedLat.value === null) return;
+  if (!process.client || !shop.value) return;
   const win = window as any;
   const map = mapRef.value?.$mapObject || mapRef.value?.map || mapRef.value?.$map;
   if (!win.google?.maps?.DirectionsService || !map) return;
@@ -429,8 +427,10 @@ onMounted(() => {
   getUserLocation();
   fetchShop();
   fetchDeliveryCharge();
-  waitForMapReady().then(() => initAutocomplete());
+  waitForMapReady().then(() => { initAutocomplete(); drawRoute(); });
 });
+
+watch([shop, userLat, userLng], () => drawRoute());
 </script>
 
 <style scoped>

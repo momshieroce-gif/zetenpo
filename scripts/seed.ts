@@ -68,26 +68,26 @@ async function seed() {
       level: 1,
     },
     {
-      id: 'super-staff',
-      name: 'Super Staff',
-      slug: 'super-staff',
-      description: 'System-level staff with limited admin permissions.',
-      level: 2,
-    },
-    {
       id: 'store-admin',
       name: 'Store Admin',
       slug: 'store-admin',
       description: 'Manages one or more shops and store staff.',
-      level: 3,
+      level: 2,
     },
     {
       id: 'store-staff',
       name: 'Store Staff',
       slug: 'store-staff',
       description: 'Handles daily store operations and products.',
-      level: 4,
+      level: 3,
     },
+    {
+      id: 'customer',
+      name: 'Customer',
+      slug: 'customer',
+      description: 'Regular customer who can make purchases.',
+      level: 4,
+    }
   ];
 
   for (const role of roles) {
@@ -98,6 +98,9 @@ async function seed() {
 
   // --- Users ---
   const superAdminId = db.collection('users').doc().id;
+  const storeAdminId = db.collection('users').doc().id;
+  const storeStaffId = db.collection('users').doc().id;
+  const customerId = db.collection('users').doc().id;
   const users = [
     {
       id: superAdminId,
@@ -112,26 +115,67 @@ async function seed() {
       isActive: true,
       address: 'Manila, Philippines',
     },
+    {
+      id: storeAdminId,
+      name: 'Seed Store Admin',
+      email: 'storeadmin@mynearshops.local',
+      password_hash: hashPassword(DEMO_PASSWORD),
+      phone: '+1234567891',
+      roleId: roles[1].id,
+      role: roles[1].name,
+      latitude: 10.3621945,
+      longitude: 123.98721099999999,
+      isActive: true,
+      address: 'Cebu, Philippines',
+    },
+    {
+      id: storeStaffId,
+      name: 'Seed Store Staff',
+      email: 'staff@mynearshops.local',
+      password_hash: hashPassword(DEMO_PASSWORD),
+      phone: '+1234567892',
+      roleId: roles[2].id,
+      role: roles[2].name,
+      latitude: 10.3621945,
+      longitude: 123.98721099999999,
+      isActive: true,
+      address: 'Davao, Philippines',
+    },
+    {
+      id: customerId,
+      name: 'Seed Customer',
+      email: 'customer@mynearshops.local',
+      password_hash: hashPassword(DEMO_PASSWORD),
+      phone: '+1234567893',
+      roleId: roles[3].id,
+      role: roles[3].name,
+      latitude: 10.3621945,
+      longitude: 123.98721099999999,
+      isActive: true,
+      address: 'Manila, Philippines',
+    },
   ];
 
   // Ensure the Auth UID matches the Firestore users doc ID so security rules can resolve the role.
-  try {
-    await admin.auth().createUser({
-      uid: superAdminId,
-      email: 'demo@mynearshops.local',
-      password: DEMO_PASSWORD,
-      displayName: 'Seed Super Admin',
-    });
-    console.log('Created Firebase Auth seed admin.');
-  } catch (e: any) {
-    if (e.code === 'auth/uid-already-exists') {
-      await admin.auth().updateUser(superAdminId, {
-        email: 'demo@mynearshops.local',
+  for (const user of users) {
+    try {
+      await admin.auth().createUser({
+        uid: user.id,
+        email: user.email,
         password: DEMO_PASSWORD,
+        displayName: user.name,
       });
-      console.log('Updated existing Firebase Auth seed admin.');
-    } else {
-      throw e;
+      console.log(`Created Firebase Auth user ${user.email}.`);
+    } catch (e: any) {
+      if (e.code === 'auth/uid-already-exists') {
+        await admin.auth().updateUser(user.id, {
+          email: user.email,
+          password: DEMO_PASSWORD,
+        });
+        console.log(`Updated Firebase Auth user ${user.email}.`);
+      } else {
+        throw e;
+      }
     }
   }
 
