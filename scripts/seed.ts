@@ -20,6 +20,7 @@ const db = admin.firestore();
 const FieldValue = admin.firestore.FieldValue;
 
 const now = () => FieldValue.serverTimestamp();
+// email: 'demo@mynearshops.local',
 const DEMO_PASSWORD = 'demo12345';
 const hashPassword = (password: string) => createHash('sha256').update(password).digest('hex');
 
@@ -104,14 +105,35 @@ async function seed() {
       email: 'demo@mynearshops.local',
       password_hash: hashPassword(DEMO_PASSWORD),
       phone: '+1234567890',
-      roleId: 'super-admin',
-      role: 'Super Admin',
+      roleId: roles[0].id,
+      role: roles[0].name,
       latitude: 10.3621945,
       longitude: 123.98721099999999,
       isActive: true,
       address: 'Manila, Philippines',
     },
   ];
+
+  // Ensure the Auth UID matches the Firestore users doc ID so security rules can resolve the role.
+  try {
+    await admin.auth().createUser({
+      uid: superAdminId,
+      email: 'demo@mynearshops.local',
+      password: DEMO_PASSWORD,
+      displayName: 'Seed Super Admin',
+    });
+    console.log('Created Firebase Auth seed admin.');
+  } catch (e: any) {
+    if (e.code === 'auth/uid-already-exists') {
+      await admin.auth().updateUser(superAdminId, {
+        email: 'demo@mynearshops.local',
+        password: DEMO_PASSWORD,
+      });
+      console.log('Updated existing Firebase Auth seed admin.');
+    } else {
+      throw e;
+    }
+  }
 
   for (const user of users) {
     const { id, ...data } = user;
@@ -151,6 +173,7 @@ async function seed() {
       isActive: true,
       logo: '',
       coverImage: '',
+      deletedAt: null,
     });
   }
 
@@ -164,7 +187,7 @@ async function seed() {
   const adjectives = ['Classic', 'Modern', 'Premium', 'Eco', 'Smart', 'Wireless', 'Comfort', 'Pro', 'Sleek', 'Durable'];
   const nouns = ['Headphones', 'Backpack', 'Sneakers', 'Watch', 'Speaker', 'Bottle', 'Sunglasses', 'Jacket', 'Keyboard', 'Mouse', 'Wallet', 'Bag', 'Lamp', 'Notebook', 'Phone Case', 'Charger', 'Power Bank', 'Water Bottle', 'Travel Mug', 'Desk Mat', 'Yoga Mat', 'Tote', 'Beanie', 'Scarf', 'Gloves', 'Umbrella', 'Journal', 'Pillow', 'Stand', 'Hub', 'Cable', 'Adapter', 'Screen', 'Camera', 'Tripod', 'Flashlight', 'Toolkit', 'Speaker', 'Earbuds', 'Tracker', 'Router', 'Monitor', 'Mat', 'Planter', 'Frame', 'Clock', 'Rug', 'Chair', 'Shelf'];
   const categories = ['Electronics', 'Fashion', 'Home', 'Sports', 'Accessories', 'Gadgets', 'Lifestyle'];
-  const productsPerShop = 100;
+  const productsPerShop = 5;
   let batch = db.batch();
   let batchCount = 0;
   let totalProducts = 0;
@@ -183,6 +206,7 @@ async function seed() {
         stock: Math.floor(Math.random() * 200) + 1,
         images: Array.from({ length: Math.floor(Math.random() * 3) + 4 }, (_, j) => `https://picsum.photos/seed/${shop.id}-${i}-${j}/300/200`),
         isActive: true,
+        deletedAt: null,
         category,
         tags: [adj.toLowerCase(), category.toLowerCase()],
         createdAt: now(),
@@ -244,6 +268,23 @@ async function seed() {
   }
   console.log(`Seeded ${paymentMethods.length} payment methods.`);
 
+  // --- Transaction Statuses ---
+  const transactionStatuses = [
+    { name: 'Pending', slug: 'pending', description: 'Order is awaiting confirmation.', is_active: true, sort_order: 1 },
+    { name: 'Preparing Order', slug: 'preparing-order', description: 'Order is being prepared.', is_active: true, sort_order: 2 },
+    { name: 'Ready for Pickup', slug: 'ready-for-pickup', description: 'Order is ready for customer pickup.', is_active: true, sort_order: 3 },
+    { name: 'Delivery in Progress', slug: 'delivery-in-progress', description: 'Order is out for delivery.', is_active: true, sort_order: 4 },
+    { name: 'Order Received', slug: 'order-received', description: 'Customer has received the order.', is_active: true, sort_order: 5 },
+    { name: 'Completed', slug: 'completed', description: 'Transaction is complete.', is_active: true, sort_order: 6 },
+    { name: 'Return or Reimbursement', slug: 'return-or-reimbursement', description: 'Order is being returned or reimbursed.', is_active: true, sort_order: 7 },
+  ];
+
+  for (const status of transactionStatuses) {
+    const docRef = db.collection('transaction_statuses').doc();
+    await docRef.set({ ...status, createdAt: now(), updatedAt: now() });
+  }
+  console.log(`Seeded ${transactionStatuses.length} transaction statuses.`);
+
   // --- Transactions ---
   const TRANSACTIONS_COUNT = 10;
   const transactions = [];
@@ -283,7 +324,7 @@ async function seed() {
       total,
       customer_mobile: user.phone,
       customer_note: isPickup ? 'I will pick up after 5 PM.' : 'Please deliver to the front desk.',
-      status: 'pending',
+      status: transactionStatuses[Math.floor(Math.random() * transactionStatuses.length)].slug,
     });
   }
 

@@ -9,7 +9,7 @@
       <div class="brand-content">
         <NuxtLink to="/" class="brand-logo">
           <div class="logo-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#fff"/><circle cx="12" cy="9" r="2.5" fill="#db2777"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#fff"/><circle cx="12" cy="9" r="2.5" fill="#fbbf24"/></svg>
           </div>
           <span>My Near Shops</span>
         </NuxtLink>
@@ -83,7 +83,8 @@
 </template>
 
 <script setup lang="ts">
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { collection, doc, getDoc, query, where, getDocs } from 'firebase/firestore';
 
 definePageMeta({ ssr: false });
 useHead({ title: 'Login | My Near Shops' });
@@ -98,17 +99,31 @@ const showPassword = ref(false);
 const loading = ref(false);
 const error = ref('');
 
+const hashPassword = async (password: string) => {
+  const cryptoObj = (globalThis as any).crypto;
+  const buf = await cryptoObj.subtle.digest('SHA-256', new TextEncoder().encode(password));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+};
+
 const signIn = async () => {
   error.value = '';
   loading.value = true;
   try {
+    const db = $firebase.db;
     const cred = await signInWithEmailAndPassword($firebase.auth, email.value, password.value);
-    authStore.setUser({
+    const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
+    if (!userDoc.exists()) throw new Error('User account not found.');
+    const data = userDoc.data() as any;
+    const profile = {
       uid: cred.user.uid,
-      email: cred.user.email,
-      displayName: cred.user.displayName,
-      photoURL: cred.user.photoURL,
-    } as any);
+      email: data.email || cred.user.email,
+      displayName: data.name || data.displayName || cred.user.displayName,
+      photoURL: data.photoURL || cred.user.photoURL,
+    };
+    authStore.setUser(profile as any);
+    document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(profile))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
     await router.push('/dashboard');
   } catch (e: any) {
     error.value = e?.message || 'Sign in failed. Please try again.';
@@ -123,12 +138,14 @@ const signInWithGoogle = async () => {
   try {
     const provider = new GoogleAuthProvider();
     const cred = await signInWithPopup($firebase.auth, provider);
-    authStore.setUser({
+    const profile = {
       uid: cred.user.uid,
       email: cred.user.email,
       displayName: cred.user.displayName,
       photoURL: cred.user.photoURL,
-    } as any);
+    };
+    authStore.setUser(profile as any);
+    document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(profile))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
     await router.push('/dashboard');
   } catch (e: any) {
     error.value = e?.message || 'Google sign in failed.';
@@ -140,50 +157,54 @@ const signInWithGoogle = async () => {
 
 <style scoped>
 .login-page { display: flex; min-height: 100vh; }
-.brand-panel { flex: 0 0 44%; position: relative; background: linear-gradient(145deg, #831843 0%, #be185d 50%, #db2777 100%); color: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.brand-panel { flex: 0 0 44%; position: relative; background: linear-gradient(145deg, #0f172a 0%, #1e293b 50%, #111827 100%); color: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .brand-bg { position: absolute; inset: 0; }
-.orb { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.3; animation: floatOrb 10s ease-in-out infinite; }
-.orb-1 { width: 400px; height: 400px; background: #f472b6; top: -120px; right: -80px; }
-.orb-2 { width: 300px; height: 300px; background: #fda4af; bottom: -80px; left: -60px; animation-delay: 3s; }
+.orb { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.25; animation: floatOrb 10s ease-in-out infinite; }
+.orb-1 { width: 400px; height: 400px; background: #fbbf24; top: -120px; right: -80px; }
+.orb-2 { width: 300px; height: 300px; background: #6366f1; bottom: -80px; left: -60px; animation-delay: 3s; }
 @keyframes floatOrb { 0%, 100% { transform: translate(0,0); } 33% { transform: translate(16px,-24px); } 66% { transform: translate(-12px,16px); } }
 .grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px); background-size: 48px 48px; }
 .brand-content { position: relative; z-index: 1; padding: 52px; width: 100%; max-width: 420px; }
 .brand-logo { display: flex; align-items: center; gap: 12px; font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 52px; }
-.logo-icon { width: 42px; height: 42px; border-radius: 12px; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; }
+.logo-icon { width: 42px; height: 42px; border-radius: 12px; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; }
 .brand-headline { font-size: 46px; font-weight: 900; line-height: 1.1; margin: 0 0 20px; }
+.brand-headline .gradient-text { background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .brand-desc { font-size: 16px; color: rgba(255,255,255,0.75); line-height: 1.7; margin: 0 0 36px; }
 .brand-features { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 14px; }
 .brand-features li { display: flex; align-items: center; gap: 10px; font-size: 15px; color: rgba(255,255,255,0.9); }
 .brand-features li::before { content: '✓'; width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
 
-.form-panel { flex: 1; display: flex; align-items: center; justify-content: center; padding: 48px 28px; background: #fff0f5; }
-.form-card { width: 100%; max-width: 440px; background: #fff; border-radius: 24px; padding: 40px; box-shadow: 0 24px 60px rgba(131,24,67,0.1); border: 1px solid var(--pink-100); }
+.form-panel { flex: 1; display: flex; align-items: center; justify-content: center; padding: 48px 28px; background: #f8fafc; }
+.form-card { width: 100%; max-width: 440px; background: #fff; border-radius: 24px; padding: 40px; box-shadow: 0 24px 60px rgba(15,23,42,0.12); border: 1px solid #e2e8f0; }
 .form-header { display: flex; align-items: center; gap: 16px; margin-bottom: 32px; }
-.form-icon { width: 52px; height: 52px; border-radius: 14px; background: linear-gradient(135deg, #db2777 0%, #be185d 100%); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(219,39,119,0.25); }
-.form-title { font-size: 26px; font-weight: 800; margin: 0 0 4px; }
-.form-subtitle { font-size: 14px; color: var(--gray-500); margin: 0; }
+.form-icon { width: 52px; height: 52px; border-radius: 14px; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(251,191,36,0.25); }
+.form-title { font-size: 26px; font-weight: 800; margin: 0 0 4px; color: #0f172a; }
+.form-subtitle { font-size: 14px; color: #64748b; margin: 0; }
 .login-form { display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; }
 .field { display: flex; flex-direction: column; gap: 7px; }
-.field-label { font-size: 12px; font-weight: 700; color: var(--gray-700); text-transform: uppercase; letter-spacing: 0.6px; }
+.field-label { font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.6px; }
 .password-wrap { position: relative; }
 .password-wrap .input { padding-right: 70px; }
-.toggle-password { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--pink-600); font-size: 12px; font-weight: 700; cursor: pointer; }
+.toggle-password { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #4f46e5; font-size: 12px; font-weight: 700; cursor: pointer; }
 .forgot-row { display: flex; justify-content: flex-end; margin-top: -4px; }
-.forgot-link { font-size: 13px; font-weight: 700; color: var(--pink-700); transition: color 0.2s; }
-.forgot-link:hover { color: var(--pink-600); text-decoration: underline; }
+.forgot-link { font-size: 13px; font-weight: 700; color: #4f46e5; transition: color 0.2s; }
+.forgot-link:hover { color: #6366f1; text-decoration: underline; }
+.btn-primary { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 50px; border-radius: 13px; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: #0f172a; font-weight: 800; font-size: 15px; border: none; cursor: pointer; box-shadow: 0 8px 20px rgba(251,191,36,0.35); transition: all 0.25s ease; }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(251,191,36,0.45); }
+.btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
 .w-full { width: 100%; }
-.error-message { font-size: 13px; color: var(--rose-600); background: var(--rose-50); padding: 10px 12px; border-radius: 10px; margin-top: 4px; }
+.error-message { font-size: 13px; color: #dc2626; background: #fef2f2; padding: 10px 12px; border-radius: 10px; margin-top: 4px; }
 .or-divider { display: flex; align-items: center; gap: 12px; margin: 24px 0; }
-.line { flex: 1; height: 1px; background: var(--gray-200); }
-.or-text { font-size: 12px; color: var(--gray-400); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
-.social-btn { display: flex; align-items: center; gap: 12px; width: 100%; height: 50px; padding: 0 18px; border-radius: 13px; border: 1.5px solid var(--gray-200); background: #fff; cursor: pointer; font-size: 15px; font-weight: 600; color: var(--gray-800); margin-bottom: 12px; transition: all 0.22s; }
-.social-btn:hover:not(:disabled) { border-color: var(--pink-300); box-shadow: 0 4px 14px rgba(219,39,119,0.1); }
+.line { flex: 1; height: 1px; background: #e2e8f0; }
+.or-text { font-size: 12px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+.social-btn { display: flex; align-items: center; gap: 12px; width: 100%; height: 50px; padding: 0 18px; border-radius: 13px; border: 1.5px solid #e2e8f0; background: #fff; cursor: pointer; font-size: 15px; font-weight: 600; color: #0f172a; margin-bottom: 12px; transition: all 0.22s; }
+.social-btn:hover:not(:disabled) { border-color: #fbbf24; box-shadow: 0 4px 14px rgba(251,191,36,0.12); }
 .social-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .sb-icon { display: flex; align-items: center; justify-content: center; }
-.soon { margin-left: auto; background: var(--gray-100); color: var(--gray-500); font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 20px; text-transform: uppercase; }
-.form-footer { text-align: center; font-size: 14px; color: var(--gray-500); margin-top: 20px; }
-.register-link { color: var(--pink-700); font-weight: 700; margin-left: 4px; }
-.register-link:hover { color: var(--pink-600); text-decoration: underline; }
+.soon { margin-left: auto; background: #f1f5f9; color: #64748b; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 20px; text-transform: uppercase; }
+.form-footer { text-align: center; font-size: 14px; color: #64748b; margin-top: 20px; }
+.register-link { color: #4f46e5; font-weight: 700; margin-left: 4px; }
+.register-link:hover { color: #6366f1; text-decoration: underline; }
 
 @media (max-width: 900px) {
   .brand-panel { display: none; }

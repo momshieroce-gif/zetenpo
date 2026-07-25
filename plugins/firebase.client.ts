@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
@@ -19,20 +19,6 @@ export default defineNuxtPlugin(() => {
   const auth = getAuth(app);
   const db = getFirestore(app);
   const storage = getStorage(app);
-  const authStore = useAuthStore();
-
-  onAuthStateChanged(auth, (u) => {
-    if (u) {
-      authStore.setUser({
-        uid: u.uid,
-        email: u.email,
-        displayName: u.displayName,
-        photoURL: u.photoURL,
-      } as UserProfile);
-    } else {
-      authStore.setUser(null);
-    }
-  });
 
   return { provide: { firebase: { app, auth, db, storage } } };
 });

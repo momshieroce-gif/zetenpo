@@ -161,6 +161,7 @@ const search = async () => {
 
     snapshot.forEach((doc) => {
       const data = doc.data() as Shop;
+      if (data.deletedAt) return;
       const d = getDistance(userLat.value, userLng.value, data.latitude, data.longitude);
       const { id: _, ...shopData } = data;
       fetched.push({ ...shopData, id: doc.id, distance: d });

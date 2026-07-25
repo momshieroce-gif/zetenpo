@@ -25,10 +25,6 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 001.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 00-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.5 6.5 0 005.34-1.48l.27.28v.79l4.25 4.25c.49.49 1.28.49 1.77 0l.78-.78c.49-.49.49-1.28 0-1.77L15.5 14zM9.5 14C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" fill="currentColor"/></svg>
             <span>Find Items</span>
           </NuxtLink>
-          <NuxtLink v-if="authStore.isLoggedIn" to="/dashboard" class="nav-link">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" fill="currentColor"/></svg>
-            <span>Dashboard</span>
-          </NuxtLink>
         </nav>
 
         <div class="header-actions">
@@ -41,13 +37,7 @@
             <NuxtLink to="/login" class="btn btn-primary">Get Started</NuxtLink>
           </template>
           <template v-else>
-            <button class="icon-btn" aria-label="Notifications">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" fill="currentColor"/></svg>
-              <span class="icon-badge">2</span>
-            </button>
-            <button class="icon-btn" aria-label="Settings">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M19.14 12.94c.04.3.06.61.06.94 0 .32-.02.64-.06.94l2.14 1.68c.19.15.24.42.12.64l-2.03 3.51c-.12.22-.37.3-.59.22l-2.52-1.01c-.53.4-1.11.74-1.74 1l-.37 2.68c-.04.25-.26.45-.52.45h-4.06c-.26 0-.48-.2-.52-.45l-.37-2.68c-.63-.26-1.21-.6-1.74-1l-2.52 1.01c-.22.08-.47 0-.59-.22l-2.03-3.51c-.12-.22-.07-.49.12-.64l2.14-1.68c-.04-.3-.06-.62-.06-.94s.02-.64.06-.94L4.46 8.92c-.19-.15-.24-.42-.12-.64l2.03-3.51c.12-.22.37-.3.59-.22l2.52 1.01c.53-.4 1.11-.74 1.74-1l.37-2.68c.04-.25.26-.45.52-.45h4.06c.26 0 .48.2.52.45l.37 2.68c.63.26 1.21.6 1.74 1l2.52-1.01c.22-.08.47 0 .59.22l2.03 3.51c.12.22.07.49-.12.64l-2.14 1.68zM12 15.5c1.93 0 3.5-1.57 3.5-3.5S13.93 8.5 12 8.5 8.5 10.07 8.5 12s1.57 3.5 3.5 3.5z" fill="currentColor"/></svg>
-            </button>
+           
             <div class="user-menu-wrapper" ref="userMenuRef">
               <button class="user-info-section" @click="toggleUserMenu">
                 <div class="user-avatar">{{ initials }}</div>
@@ -59,7 +49,6 @@
               </button>
               <div v-if="userMenuOpen" class="user-menu">
                 <div class="user-menu-header">
-                  <div class="user-menu-avatar">{{ initials }}</div>
                   <div class="user-menu-info">
                     <div class="user-menu-name">{{ authStore.displayName || 'User' }}</div>
                     <div class="user-menu-email">{{ authStore.user?.email || '' }}</div>
@@ -67,8 +56,8 @@
                 </div>
                 <div class="user-menu-divider"></div>
                 <NuxtLink to="/dashboard" class="user-menu-item" @click="userMenuOpen = false">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="currentColor"/></svg>
-                  <span>My Profile</span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" fill="currentColor"/></svg>
+                  <span>Dashboard</span>
                 </NuxtLink>
                 <NuxtLink to="/dashboard" class="user-menu-item" @click="userMenuOpen = false">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M19.14 12.94c.04.3.06.61.06.94 0 .32-.02.64-.06.94l2.14 1.68c.19.15.24.42.12.64l-2.03 3.51c-.12.22-.37.3-.59.22l-2.52-1.01c-.53.4-1.11.74-1.74 1l-.37 2.68c-.04.25-.26.45-.52.45h-4.06c-.26 0-.48-.2-.52-.45l-.37-2.68c-.63-.26-1.21-.6-1.74-1l-2.52 1.01c-.22.08-.47 0-.59-.22l-2.03-3.51c-.12-.22-.07-.49.12-.64l2.14-1.68c-.04-.3-.06-.62-.06-.94s.02-.64.06-.94L4.46 8.92c-.19-.15-.24-.42-.12-.64l2.03-3.51c.12-.22.37-.3.59-.22l2.52 1.01c.53-.4 1.11-.74 1.74-1l.37-2.68c.04-.25.26-.45.52-.45h4.06c.26 0 .48.2.52.45l.37 2.68c.63.26 1.21.6 1.74 1l2.52-1.01c.22-.08.47 0 .59.22l2.03 3.51c.12.22.07.49-.12.64l-2.14 1.68zM12 15.5c1.93 0 3.5-1.57 3.5-3.5S13.93 8.5 12 8.5 8.5 10.07 8.5 12s1.57 3.5 3.5 3.5z" fill="currentColor"/></svg>

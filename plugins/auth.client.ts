@@ -1,7 +1,5 @@
 function getAuthUserFromCookie() {
-  const cookieHeader = process.server
-    ? (useRequestHeaders(['cookie']).cookie || '')
-    : (typeof document !== 'undefined' ? document.cookie : '');
+  const cookieHeader = typeof document !== 'undefined' ? document.cookie : '';
   const match = cookieHeader.match(/(?:^|; )auth_user=([^;]*)/);
   if (!match) return null;
   try {
@@ -11,13 +9,10 @@ function getAuthUserFromCookie() {
   }
 }
 
-export default defineNuxtRouteMiddleware((to) => {
+export default defineNuxtPlugin(() => {
   const authStore = useAuthStore();
   if (!authStore.isLoggedIn) {
     const user = getAuthUserFromCookie();
     if (user) authStore.setUser(user);
-  }
-  if (!authStore.isLoggedIn && to.path !== '/login') {
-    return navigateTo('/login');
   }
 });

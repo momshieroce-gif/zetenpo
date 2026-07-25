@@ -34,6 +34,7 @@ export interface Shop {
   ownerId?: string;
   isVerified?: boolean;
   isActive?: boolean;
+  deletedAt?: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -51,6 +52,7 @@ export interface Product {
   isAvailable?: boolean;
   latitude?: number;
   longitude?: number;
+  deletedAt?: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
 }

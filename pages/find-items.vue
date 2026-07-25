@@ -145,12 +145,14 @@ const search = async () => {
   const results: ResultItem[] = [];
   for (const shopDoc of shopsSnap.docs) {
     const shop = { id: shopDoc.id, ...shopDoc.data() } as Shop;
+    if (shop.deletedAt) continue;
     const d = getDistance(userLat.value, userLng.value, shop.latitude, shop.longitude);
     if (d > radius.value) continue;
     const productsQuery = query(collection(db, 'products'), where('shopId', '==', shop.id));
     const productsSnap = await getDocs(productsQuery);
     const matchedDoc = productsSnap.docs.find((p) => {
       const data = p.data() as Product;
+      if (data.deletedAt) return false;
       return data.name?.toLowerCase().includes(q) || (data.category || '').toLowerCase().includes(q);
     });
     if (matchedDoc) {
