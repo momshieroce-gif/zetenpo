@@ -133,7 +133,7 @@ definePageMeta({
 useHead({ title: 'Users | My Near Shops' });
 
 const nuxtApp = useNuxtApp() as any;
-const db = nuxtApp.$firebase.db;
+const db = nuxtApp.$firebase?.db;
 const authStore = useAuthStore();
 
 const users = ref<User[]>([]);

@@ -25,7 +25,10 @@
       </div>
       <div class="container action-bar">
         <button class="btn btn-ghost-action" @click="getLocation">My Location</button>
-        <button class="btn btn-primary" @click="search">Find Shops</button>
+        <button class="btn btn-primary" :disabled="isSearching" @click="search">
+          <span v-if="isSearching">Searching...</span>
+          <span v-else>Find Shops</span>
+        </button>
         <input v-model="searchText" type="text" class="input search-input" placeholder="Search shops by name..." />
         <select v-model="radius" class="input radius-select">
           <option v-for="r in [5, 10, 15, 20]" :key="r" :value="r">{{ r }} km</option>
@@ -61,12 +64,11 @@
           <GoogleMap ref="mapRef" v-if="apiKey" :api-key="apiKey" :center="center" :zoom="zoom" style="width: 100%; height: 100%" :map-id="mapId || undefined" :disable-default-ui="false" :draggable="true" :clickable-icons="false" :libraries="['places', 'marker', 'routes']">
             <AdvancedMarker :options="getLocationMarkerOptions()">
               <InfoWindow :options="{ headerContent: 'You are here', disableAutoPan: false }" v-model="showInfo">
-                <div class="iw-content">Your current location</div>
               </InfoWindow>
             </AdvancedMarker>
             <AdvancedMarker v-for="shop in filteredShops" :key="shop.id" :options="getStoreMarkerOptions(shop)" @click="selectShop(shop)">
               <InfoWindow v-if="selectedShop?.id === shop.id" :options="{ headerContent: shop.name, disableAutoPan: false, closeButton: true }" @close="selectedShop = null">
-                <div class="iw-content">{{ shop.name }}<br><small>{{ shop.distance?.toFixed(1) }} km away</small><br><NuxtLink :to="`/shops/${shop.id}`" class="iw-view-link" @click.stop>View Store</NuxtLink></div>
+                <div class="iw-content"><small>{{ shop.distance?.toFixed(1) }} km away</small><br><NuxtLink :to="`/shops/${shop.id}`" class="iw-view-link" style="color: darkblue; font-weight: bold;" @click.stop>View Store</NuxtLink></div>
               </InfoWindow>
             </AdvancedMarker>
           </GoogleMap>
@@ -101,6 +103,7 @@ const showInfo = ref(true);
 const selectedShop = ref<ShopWithDistance | null>(null);
 const searchText = ref('');
 const radius = ref(5);
+const isSearching = ref(false);
 
 const center = computed(() => ({ lat: lat.value, lng: lng.value }));
 
@@ -152,25 +155,31 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): nu
 }
 
 const search = async () => {
+  if (isSearching.value) return;
+  isSearching.value = true;
   getLocation();
 
-  if (process.client && nuxtApp.$firebase?.db) {
-    const db = nuxtApp.$firebase.db;
-    const snapshot = await getDocs(collection(db, 'shops'));
-    const fetched: ShopWithDistance[] = [];
+  try {
+    if (process.client && nuxtApp.$firebase?.db) {
+      const db = nuxtApp.$firebase.db;
+      const snapshot = await getDocs(collection(db, 'shops'));
+      const fetched: ShopWithDistance[] = [];
 
-    snapshot.forEach((doc) => {
-      const data = doc.data() as Shop;
-      if (data.deletedAt) return;
-      const d = getDistance(userLat.value, userLng.value, data.latitude, data.longitude);
-      const { id: _, ...shopData } = data;
-      fetched.push({ ...shopData, id: doc.id, distance: d });
-    });
+      snapshot.forEach((doc) => {
+        const data = doc.data() as Shop;
+        if (data.deletedAt) return;
+        const d = getDistance(userLat.value, userLng.value, data.latitude, data.longitude);
+        const { id: _, ...shopData } = data;
+        fetched.push({ ...shopData, id: doc.id, distance: d });
+      });
 
-    // Sort by distance
-    fetched.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+      // Sort by distance
+      fetched.sort((a, b) => (a.distance || 0) - (b.distance || 0));
 
-    shops.value = fetched.filter((s) => s.distance <= radius.value);
+      shops.value = fetched.filter((s) => s.distance <= radius.value);
+    }
+  } finally {
+    isSearching.value = false;
   }
 };
 
@@ -614,6 +623,11 @@ onMounted(() => {
   width: 100px;
   background: rgba(255,255,255,0.1);
   color: #fff;
+}
+
+.radius-select option {
+  background: #fff;
+  color: #1e1b4b;
 }
 
 .btn-ghost-action {

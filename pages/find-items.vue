@@ -25,7 +25,10 @@
       </div>
       <div class="container action-bar">
         <button class="btn btn-ghost-action" @click="getLocation">My Location</button>
-        <button class="btn btn-primary" :disabled="!searchText" @click="search">Find Items</button>
+        <button class="btn btn-primary" :disabled="!searchText || isSearching" @click="search">
+          <span v-if="isSearching">Searching...</span>
+          <span v-else>Find Items</span>
+        </button>
         <input v-model="searchText" type="text" class="input search-input" placeholder="Type a product name to search..." />
         <select v-model="radius" class="input radius-select">
           <option v-for="r in [5, 10, 15, 20]" :key="r" :value="r">{{ r }} km</option>
@@ -60,12 +63,11 @@
         <ClientOnly fallback="Loading map...">
           <GoogleMap ref="mapRef" v-if="apiKey" :api-key="apiKey" :center="center" :zoom="zoom" style="width: 100%; height: 100%" :map-id="mapId || undefined" :libraries="['marker', 'routes']">
             <AdvancedMarker :options="getLocationMarkerOptions()">
-              <InfoWindow :options="{ headerContent: 'You are here', disableAutoPan: false }" v-model="showInfo"><div class="iw-content">Your current location</div></InfoWindow>
+              <InfoWindow :options="{ headerContent: 'You are here', disableAutoPan: false }" v-model="showInfo"></InfoWindow>
             </AdvancedMarker>
             <AdvancedMarker v-for="item in filteredItems" :key="item.id" :options="getStoreMarkerOptions(item)" @click="focusItem(item)">
               <InfoWindow v-if="selectedItem?.id === item.id" :options="{ headerContent: '&nbsp;&nbsp;&nbsp;' + item.shopName, disableAutoPan: false, closeButton: true }" @close="selectedItem = null">
                 <div class="iw-content">
-                  <div class="iw-header"><strong>{{ item.shopName }}</strong></div>
                   <div class="iw-name">{{ item.name }}</div>
                   <div class="iw-dist"><small>{{ item.distance.toFixed(1) }} km away</small></div>
                   <NuxtLink :to="`/items/${item.id}`" class="shop-link" @click.stop>View Product</NuxtLink>
@@ -108,6 +110,7 @@ const showInfo = ref(true);
 const selectedItem = ref<ResultItem | null>(null);
 const searchText = ref('');
 const radius = ref(5);
+const isSearching = ref(false);
 
 const mapRef = ref<{ $mapObject?: any; map?: any; $map?: any } | null>(null);
 const directions = ref<any>(null);
@@ -138,30 +141,36 @@ const getLocation = () => {
 
 const search = async () => {
   if (!process.client || !nuxtApp.$firebase?.db || !searchText.value.trim()) return;
+  if (isSearching.value) return;
+  isSearching.value = true;
   getLocation();
-  const db = nuxtApp.$firebase.db;
-  const q = searchText.value.toLowerCase().trim();
-  const shopsSnap = await getDocs(collection(db, 'shops'));
-  const results: ResultItem[] = [];
-  for (const shopDoc of shopsSnap.docs) {
-    const shop = { id: shopDoc.id, ...shopDoc.data() } as Shop;
-    if (shop.deletedAt) continue;
-    const d = getDistance(userLat.value, userLng.value, shop.latitude, shop.longitude);
-    if (d > radius.value) continue;
-    const productsQuery = query(collection(db, 'products'), where('shopId', '==', shop.id));
-    const productsSnap = await getDocs(productsQuery);
-    const matchedDoc = productsSnap.docs.find((p) => {
-      const data = p.data() as Product;
-      if (data.deletedAt) return false;
-      return data.name?.toLowerCase().includes(q) || (data.category || '').toLowerCase().includes(q);
-    });
-    if (matchedDoc) {
-      const product = { id: matchedDoc.id, ...matchedDoc.data() } as Product;
-      results.push({ ...product, distance: d, shopName: shop.name, storeLatitude: shop.latitude, storeLongitude: shop.longitude });
+  try {
+    const db = nuxtApp.$firebase.db;
+    const q = searchText.value.toLowerCase().trim();
+    const shopsSnap = await getDocs(collection(db, 'shops'));
+    const results: ResultItem[] = [];
+    for (const shopDoc of shopsSnap.docs) {
+      const shop = { id: shopDoc.id, ...shopDoc.data() } as Shop;
+      if (shop.deletedAt) continue;
+      const d = getDistance(userLat.value, userLng.value, shop.latitude, shop.longitude);
+      if (d > radius.value) continue;
+      const productsQuery = query(collection(db, 'products'), where('shopId', '==', shop.id));
+      const productsSnap = await getDocs(productsQuery);
+      const matchedDoc = productsSnap.docs.find((p) => {
+        const data = p.data() as Product;
+        if (data.deletedAt) return false;
+        return data.name?.toLowerCase().includes(q) || (data.category || '').toLowerCase().includes(q);
+      });
+      if (matchedDoc) {
+        const product = { id: matchedDoc.id, ...matchedDoc.data() } as Product;
+        results.push({ ...product, distance: d, shopName: shop.name, storeLatitude: shop.latitude, storeLongitude: shop.longitude });
+      }
     }
+    results.sort((a, b) => a.distance - b.distance);
+    items.value = results;
+  } finally {
+    isSearching.value = false;
   }
-  results.sort((a, b) => a.distance - b.distance);
-  items.value = results;
 };
 
 const focusItem = (item: ResultItem) => {
@@ -319,6 +328,8 @@ onMounted(() => {
 .search-input::placeholder { color: rgba(255,255,255,0.6); }
 .search-input:focus { border-color: rgba(255,255,255,0.5); box-shadow: 0 0 0 3px rgba(255,255,255,0.1); }
 .radius-select { width: 100px; background: rgba(255,255,255,0.1); color: #fff; }
+
+.radius-select option { background: #fff; color: #1e1b4b; }
 .btn-ghost-action { background: rgba(255,255,255,0.12); color: #fff; border: 1.5px solid rgba(255,255,255,0.25); }
 
 .map-body { display: grid; grid-template-columns: 360px 1fr; min-height: 620px; }

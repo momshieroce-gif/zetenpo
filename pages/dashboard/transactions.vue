@@ -45,8 +45,12 @@
                 </span>
               </td>
               <td class="actions">
-                <button class="btn-action view" @click="viewTransaction(tx)">View</button>
-                <button class="btn-action cancel" :disabled="!isCancellable(tx)" @click="cancelTransaction(tx)">Cancel</button>
+                <button class="btn-icon view" title="View" @click="viewTransaction(tx)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button class="btn-icon cancel" title="Cancel" :disabled="!isCancellable(tx)" @click="cancelTransaction(tx)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                </button>
               </td>
             </tr>
           </tbody>
@@ -187,7 +191,7 @@ definePageMeta({
 useHead({ title: 'Transactions | My Near Shops' });
 
 const nuxtApp = useNuxtApp() as any;
-const db = nuxtApp.$firebase.db;
+const db = nuxtApp.$firebase?.db;
 
 const transactions = ref<Transaction[]>([]);
 const loading = ref(true);
