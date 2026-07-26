@@ -121,6 +121,8 @@ const signIn = async () => {
       email: data.email || cred.user.email,
       displayName: data.name || data.displayName || cred.user.displayName,
       photoURL: data.photoURL || cred.user.photoURL,
+      roleId: data.roleId || '',
+      role: data.role || '',
     };
     authStore.setUser(profile as any);
     document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(profile))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;

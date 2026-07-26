@@ -20,7 +20,12 @@ const db = admin.firestore();
 const FieldValue = admin.firestore.FieldValue;
 
 const now = () => FieldValue.serverTimestamp();
-// email: 'demo@mynearshops.local',
+//superAdmin@mynearshops.local,
+//superdelivery@mynearshops.local,
+//storeadmin@mynearshops.local,
+//staff@mynearshops.local,
+//delivery@mynearshops.local,
+//customer@mynearshops.local
 const DEMO_PASSWORD = 'demo12345';
 const hashPassword = (password: string) => createHash('sha256').update(password).digest('hex');
 
@@ -54,7 +59,7 @@ async function resetCollections(paths: string[]) {
 }
 
 async function seed() {
-  await resetCollections(['roles', 'users', 'shops', 'products', 'delivery_charge', 'delivery_methods', 'payment_methods', 'transactions']);
+  await resetCollections(['roles', 'users', 'shops', 'shopMembers', 'products', 'delivery_charge', 'delivery_methods', 'payment_methods', 'transactions']);
 
   console.log('Starting Firestore seed...');
 
@@ -68,25 +73,39 @@ async function seed() {
       level: 1,
     },
     {
+      id: 'super-delivery',
+      name: 'Super Delivery',
+      slug: 'super-delivery',
+      description: 'Deliver the purchases',
+      level: 2,
+    },
+    {
       id: 'store-admin',
       name: 'Store Admin',
       slug: 'store-admin',
       description: 'Manages one or more shops and store staff.',
-      level: 2,
+      level: 3,
     },
     {
       id: 'store-staff',
       name: 'Store Staff',
       slug: 'store-staff',
       description: 'Handles daily store operations and products.',
-      level: 3,
+      level: 4,
+    },
+    {
+      id: 'store-delivery',
+      name: 'Store Delivery',
+      slug: 'store-delivery',
+      description: 'Deliver the purchases',
+      level: 5,
     },
     {
       id: 'customer',
       name: 'Customer',
       slug: 'customer',
       description: 'Regular customer who can make purchases.',
-      level: 4,
+      level: 6,
     }
   ];
 
@@ -98,14 +117,18 @@ async function seed() {
 
   // --- Users ---
   const superAdminId = db.collection('users').doc().id;
+  const superDeliveryId = db.collection('users').doc().id;
   const storeAdminId = db.collection('users').doc().id;
   const storeStaffId = db.collection('users').doc().id;
+  const deliveryId = db.collection('users').doc().id;
   const customerId = db.collection('users').doc().id;
+  const SHOP_COUNT = 50;
+  const shopIds = Array.from({ length: SHOP_COUNT }, () => db.collection('shops').doc().id);
   const users = [
     {
       id: superAdminId,
       name: 'Seed Super Admin',
-      email: 'demo@mynearshops.local',
+      email: 'superAdmin@mynearshops.local',
       password_hash: hashPassword(DEMO_PASSWORD),
       phone: '+1234567890',
       roleId: roles[0].id,
@@ -116,13 +139,26 @@ async function seed() {
       address: 'Manila, Philippines',
     },
     {
-      id: storeAdminId,
-      name: 'Seed Store Admin',
-      email: 'storeadmin@mynearshops.local',
+      id: superDeliveryId,
+      name: 'Seed Super Delivery',
+      email: 'superdelivery@mynearshops.local',
       password_hash: hashPassword(DEMO_PASSWORD),
       phone: '+1234567891',
       roleId: roles[1].id,
       role: roles[1].name,
+      latitude: 10.3621945,
+      longitude: 123.98721099999999,
+      isActive: true,
+      address: 'Manila, Philippines',
+    },
+    {
+      id: storeAdminId,
+      name: 'Seed Store Admin',
+      email: 'storeadmin@mynearshops.local',
+      password_hash: hashPassword(DEMO_PASSWORD),
+      phone: '+1234567892',
+      roleId: roles[2].id,
+      role: roles[2].name,
       latitude: 10.3621945,
       longitude: 123.98721099999999,
       isActive: true,
@@ -133,22 +169,35 @@ async function seed() {
       name: 'Seed Store Staff',
       email: 'staff@mynearshops.local',
       password_hash: hashPassword(DEMO_PASSWORD),
-      phone: '+1234567892',
-      roleId: roles[2].id,
-      role: roles[2].name,
+      phone: '+1234567893',
+      roleId: roles[3].id,
+      role: roles[3].name,
       latitude: 10.3621945,
       longitude: 123.98721099999999,
       isActive: true,
       address: 'Davao, Philippines',
     },
     {
+      id: deliveryId,
+      name: 'Seed Store Delivery',
+      email: 'delivery@mynearshops.local',
+      password_hash: hashPassword(DEMO_PASSWORD),
+      phone: '+1234567894',
+      roleId: roles[4].id,
+      role: roles[4].name,
+      latitude: 10.3621945,
+      longitude: 123.98721099999999,
+      isActive: true,
+      address: 'Manila, Philippines'
+    },
+    {
       id: customerId,
       name: 'Seed Customer',
       email: 'customer@mynearshops.local',
       password_hash: hashPassword(DEMO_PASSWORD),
-      phone: '+1234567893',
-      roleId: roles[3].id,
-      role: roles[3].name,
+      phone: '+1234567895',
+      roleId: roles[5].id,
+      role: roles[5].name,
       latitude: 10.3621945,
       longitude: 123.98721099999999,
       isActive: true,
@@ -186,7 +235,6 @@ async function seed() {
   console.log(`Seeded ${users.length} users.`);
 
   // --- Shops ---
-  const SHOP_COUNT = 50;
   const centerLat = 10.3621945;
   const centerLon = 123.98721099999999;
 
@@ -206,9 +254,9 @@ async function seed() {
   for (let i = 0; i < SHOP_COUNT; i++) {
     const { latitude, longitude } = randomPointWithinRadius(centerLat, centerLon, 20);
     shops.push({
-      id: db.collection('shops').doc().id,
+      id: shopIds[i],
       name: `Shop ${i + 1}`,
-      ownerId: superAdminId,
+      ownerId: users[Math.floor(Math.random() * users.length)].id,
       description: `Description for shop ${i + 1}`,
       address: `${i + 1} Generated Street, Manila`,
       latitude,
@@ -227,11 +275,39 @@ async function seed() {
   }
   console.log(`Seeded ${shops.length} shops.`);
 
+  // --- Shop Members ---
+  const shopMembers = [
+    {
+      id: `${shops[0].id}_${deliveryId}`,
+      shopId: shops[0].id,
+      uid: deliveryId,
+      role: 'delivery',
+    },
+    {
+      id: `${shops[0].id}_${storeStaffId}`,
+      shopId: shops[0].id,
+      uid: storeStaffId,
+      role: 'cashier',
+    },
+    {
+      id: `${shops[1].id}_${storeAdminId}`,
+      shopId: shops[1].id,
+      uid: storeAdminId,
+      role: 'staff',
+    },
+  ];
+
+  for (const member of shopMembers) {
+    const { id, ...data } = member;
+    await db.collection('shopMembers').doc(id).set({ ...data, createdAt: now(), updatedAt: now() });
+  }
+  console.log(`Seeded ${shopMembers.length} shop members.`);
+
   // --- Products ---
   const adjectives = ['Classic', 'Modern', 'Premium', 'Eco', 'Smart', 'Wireless', 'Comfort', 'Pro', 'Sleek', 'Durable'];
   const nouns = ['Headphones', 'Backpack', 'Sneakers', 'Watch', 'Speaker', 'Bottle', 'Sunglasses', 'Jacket', 'Keyboard', 'Mouse', 'Wallet', 'Bag', 'Lamp', 'Notebook', 'Phone Case', 'Charger', 'Power Bank', 'Water Bottle', 'Travel Mug', 'Desk Mat', 'Yoga Mat', 'Tote', 'Beanie', 'Scarf', 'Gloves', 'Umbrella', 'Journal', 'Pillow', 'Stand', 'Hub', 'Cable', 'Adapter', 'Screen', 'Camera', 'Tripod', 'Flashlight', 'Toolkit', 'Speaker', 'Earbuds', 'Tracker', 'Router', 'Monitor', 'Mat', 'Planter', 'Frame', 'Clock', 'Rug', 'Chair', 'Shelf'];
   const categories = ['Electronics', 'Fashion', 'Home', 'Sports', 'Accessories', 'Gadgets', 'Lifestyle'];
-  const productsPerShop = 5;
+  const productsPerShop = 10;
   let batch = db.batch();
   let batchCount = 0;
   let totalProducts = 0;

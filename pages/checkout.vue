@@ -410,6 +410,12 @@ const isValidMobile = (val: string) => {
   return /^9\d{9}$/.test(cleaned);
 };
 
+watch(mobile, (val) => {
+  if (mobileError.value && isValidMobile(val)) {
+    mobileError.value = '';
+  }
+});
+
 const processOrder = async () => {
   mobileError.value = '';
   if (!isValidMobile(mobile.value)) {

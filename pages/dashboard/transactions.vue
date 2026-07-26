@@ -141,7 +141,10 @@
             </thead>
             <tbody>
               <tr v-for="(item, idx) in selectedTransaction.items" :key="idx">
-                <td>{{ item.name || '-' }}</td>
+                <td>
+                  <NuxtLink v-if="item.product_id" :to="'/items/' + item.product_id" class="product-link">{{ item.name || '-' }}</NuxtLink>
+                  <span v-else>{{ item.name || '-' }}</span>
+                </td>
                 <td>{{ formatMoney(item.price) }}</td>
                 <td>{{ item.qty ?? 1 }}</td>
                 <td>{{ formatMoney(item.subtotal) }}</td>
@@ -170,7 +173,7 @@
 </template>
 
 <script setup lang="ts">
-import { collection, doc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 
 interface Transaction {
   id: string;
@@ -204,6 +207,7 @@ useHead({ title: 'Transactions | My Near Shops' });
 
 const nuxtApp = useNuxtApp() as any;
 const db = nuxtApp.$firebase?.db;
+const authStore = useAuthStore();
 
 const transactions = ref<Transaction[]>([]);
 const loading = ref(true);
@@ -328,14 +332,31 @@ const fetchTransactions = async () => {
   fetchError.value = '';
   try {
     if (!db) throw new Error('Firebase is not available.');
+    const uid = authStore.user?.uid || '';
+    const roleId = authStore.user?.roleId || '';
+
+    let txQuery: any = collection(db, 'transactions');
+    let shopIdFilter: string[] | null = null;
+
+    if (roleId === 'customer') {
+      txQuery = query(collection(db, 'transactions'), where('user_id', '==', uid));
+    } else if (['store-admin', 'store-staff', 'store-delivery'].includes(roleId)) {
+      const membersSnap = await getDocs(query(collection(db, 'shopMembers'), where('uid', '==', uid)));
+      shopIdFilter = membersSnap.docs.map((d: any) => d.data().shopId).filter(Boolean);
+    }
+    // super-admin and super-delivery: no filtering
+
     const [shopSnap, txSnap, statusSnap] = await Promise.all([
       getDocs(collection(db, 'shops')),
-      getDocs(collection(db, 'transactions')),
+      getDocs(txQuery),
       getDocs(collection(db, 'transaction_statuses')),
     ]);
     shopMap.value = Object.fromEntries(shopSnap.docs.map((d: any) => [d.id, d.data().name || d.id]));
     statusList.value = statusSnap.docs.map((d: any) => d.data());
-    const fetched: Transaction[] = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
+    let fetched: Transaction[] = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
+    if (shopIdFilter) {
+      fetched = fetched.filter(tx => tx.store_id && shopIdFilter!.includes(tx.store_id));
+    }
     fetched.sort((a, b) => {
       const da = toDate(a.createdAt)?.getTime() || 0;
       const db = toDate(b.createdAt)?.getTime() || 0;
@@ -421,6 +442,8 @@ onMounted(() => {
 .items-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
 .items-table th { text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
 .items-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+.product-link { color: #4f46e5; text-decoration: none; font-weight: 600; }
+.product-link:hover { text-decoration: underline; }
 .totals { border-top: 1px solid #f1f5f9; padding-top: 16px; }
 .total-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; color: #475569; }
 .total-row.grand { font-size: 16px; font-weight: 800; color: #0f172a; border-top: 1px solid #f1f5f9; padding-top: 12px; margin-top: 8px; }

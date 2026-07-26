@@ -10,10 +10,13 @@
           <p class="page-subtitle">Manage your store locations and details</p>
         </div>
       </div>
-      <button class="btn btn-primary" @click="openCreate">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Add Shop
-      </button>
+      <div class="header-right">
+        <input v-model="searchQuery" type="text" class="search-input" placeholder="Search shop name..." />
+        <button class="btn btn-primary" @click="openCreate">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Shop
+        </button>
+      </div>
     </div>
 
     <div class="card">
@@ -22,7 +25,7 @@
         <p>Loading shops...</p>
       </div>
       <div v-else-if="fetchError" class="state error">{{ fetchError }}</div>
-      <template v-else-if="shops.length">
+      <template v-else-if="filteredShops.length">
         <table class="data-table">
         <thead>
           <tr>
@@ -49,6 +52,9 @@
               </span>
             </td>
             <td class="actions">
+              <button class="btn-icon members" @click="openMembers(shop)" title="Members">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </button>
               <button class="btn-icon products" @click="navigateTo('/dashboard/shops/' + shop.id + '/products')" title="Products">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
               </button>
@@ -72,7 +78,7 @@
         <div class="empty-icon">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
         </div>
-        <p class="empty-title">No shops yet</p>
+        <p class="empty-title">{{ searchQuery.trim() ? 'No matching shops' : 'No shops yet' }}</p>
         <p class="empty-desc">Add your first shop to get started.</p>
         <button class="btn btn-primary" @click="openCreate">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -128,6 +134,47 @@
             <span v-if="saving">Saving...</span>
             <span v-else>Save Shop</span>
           </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showMembersModal" class="modal-overlay" @click.self="closeMembersModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>{{ selectedShopForMembers?.name || 'Shop' }} - Members</h3>
+          <button class="close-btn" @click="closeMembersModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="member-add-row">
+            <input v-model="memberEmail" type="email" class="input" placeholder="User email" @keyup.enter="addMember" />
+            <select v-model="memberRole" class="input member-role">
+              <option value="staff">Staff</option>
+              <option value="cashier">Cashier</option>
+              <option value="delivery">Delivery</option>
+            </select>
+            <button class="btn btn-primary" :disabled="memberSaving" @click="addMember">
+              <span v-if="memberSaving">Adding...</span>
+              <span v-else>Add</span>
+            </button>
+          </div>
+          <div v-if="memberError" class="error">{{ memberError }}</div>
+          <div v-if="memberSuccess" class="member-success">{{ memberSuccess }}</div>
+          <div v-if="membersLoading" class="member-meta">Loading members...</div>
+          <ul v-else-if="shopMembers.length" class="member-list">
+            <li v-for="m in shopMembers" :key="m.id" class="member-item">
+              <div>
+                <div class="member-name">{{ m.name || m.email || m.uid }}</div>
+                <div class="member-meta">{{ m.email }} · {{ m.role }}</div>
+              </div>
+              <button class="btn-icon delete" title="Remove" @click="removeMember(m)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </li>
+          </ul>
+          <div v-else class="member-meta">No members yet.</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" @click="closeMembersModal">Close</button>
         </div>
       </div>
     </div>
@@ -215,7 +262,7 @@
 </template>
 
 <script setup lang="ts">
-import { collection, addDoc, doc, updateDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, documentId, getDocs, getDoc, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import type { Shop, Product } from '~/types';
 
 definePageMeta({
@@ -257,11 +304,18 @@ const productForm = reactive({
 });
 const perPage = 20;
 const currentPage = ref(1);
-const totalPages = computed(() => Math.ceil(shops.value.length / perPage) || 1);
+const searchQuery = ref('');
+const filteredShops = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase();
+  if (!q) return shops.value;
+  return shops.value.filter((s: Shop) => s.name?.toLowerCase().includes(q));
+});
+const totalPages = computed(() => Math.ceil(filteredShops.value.length / perPage) || 1);
 const paginatedShops = computed(() => {
   const start = (currentPage.value - 1) * perPage;
-  return shops.value.slice(start, start + perPage);
+  return filteredShops.value.slice(start, start + perPage);
 });
+watch(searchQuery, () => { currentPage.value = 1; });
 const nextPage = () => {
   if (currentPage.value < totalPages.value) currentPage.value++;
 };
@@ -279,6 +333,112 @@ const form = reactive({
   logo: '',
   isActive: true,
 });
+
+const memberEmail = ref('');
+const memberRole = ref('staff');
+const memberSaving = ref(false);
+const membersLoading = ref(false);
+const memberError = ref('');
+const memberSuccess = ref('');
+const shopMembers = ref<any[]>([]);
+const showMembersModal = ref(false);
+const selectedShopForMembers = ref<Shop | null>(null);
+
+const openMembers = (shop: Shop) => {
+  resetMembers();
+  selectedShopForMembers.value = shop;
+  fetchShopMembers(shop.id);
+  showMembersModal.value = true;
+};
+
+const closeMembersModal = () => {
+  showMembersModal.value = false;
+  selectedShopForMembers.value = null;
+  resetMembers();
+};
+
+const resetMembers = () => {
+  memberEmail.value = '';
+  memberRole.value = 'staff';
+  memberError.value = '';
+  memberSuccess.value = '';
+  shopMembers.value = [];
+};
+
+const fetchShopMembers = async (shopId: string) => {
+  membersLoading.value = true;
+  try {
+    const snap = await getDocs(query(collection(db, 'shopMembers'), where('shopId', '==', shopId)));
+    const members = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    await Promise.all(members.map(async (m: any) => {
+      try {
+        const userDoc = await getDoc(doc(db, 'users', m.uid));
+        if (userDoc.exists()) {
+          const data = userDoc.data() as any;
+          m.name = data.name || data.displayName || '';
+          m.email = data.email || '';
+        }
+      } catch { /* keep uid fallback */ }
+    }));
+    shopMembers.value = members;
+  } catch (e: any) {
+    memberError.value = e?.message || 'Failed to load members.';
+  } finally {
+    membersLoading.value = false;
+  }
+};
+
+const addMember = async () => {
+  memberError.value = '';
+  memberSuccess.value = '';
+  const email = memberEmail.value.trim();
+  if (!email) {
+    memberError.value = 'Email is required.';
+    return;
+  }
+  if (!selectedShopForMembers.value) return;
+  memberSaving.value = true;
+  try {
+    const userSnap = await getDocs(query(collection(db, 'users'), where('email', '==', email)));
+    if (userSnap.empty) {
+      memberError.value = 'No user found with that email.';
+      return;
+    }
+    const userDoc = userSnap.docs[0];
+    const uid = userDoc.id;
+    const shopId = selectedShopForMembers.value.id;
+    const memberId = `${shopId}_${uid}`;
+    if (shopMembers.value.some((m: any) => m.id === memberId)) {
+      memberError.value = 'This user is already a member of this shop.';
+      return;
+    }
+    await setDoc(doc(db, 'shopMembers', memberId), {
+      shopId,
+      uid,
+      role: memberRole.value,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    memberSuccess.value = `${(userDoc.data() as any).name || email} added as ${memberRole.value}.`;
+    memberEmail.value = '';
+    await fetchShopMembers(shopId);
+  } catch (e: any) {
+    memberError.value = e?.message || 'Failed to add member.';
+  } finally {
+    memberSaving.value = false;
+  }
+};
+
+const removeMember = async (member: any) => {
+  memberError.value = '';
+  memberSuccess.value = '';
+  try {
+    await deleteDoc(doc(db, 'shopMembers', member.id));
+    shopMembers.value = shopMembers.value.filter((m: any) => m.id !== member.id);
+  } catch (e: any) {
+    memberError.value = e?.message || 'Failed to remove member.';
+  }
+};
 
 const resetForm = () => {
   form.name = '';
@@ -323,9 +483,51 @@ const fetchShops = async () => {
   fetchError.value = '';
   try {
     if (!db) throw new Error('Firebase is not available.');
-    const snapshot = await getDocs(collection(db, 'shops'));
-    shops.value = snapshot.docs
-      .map((d: any) => ({ id: d.id, ...d.data() } as Shop))
+    const uid = authStore.user?.uid || '';
+    const roleId = authStore.user?.roleId || '';
+
+    let shopIds: string[] = [];
+    if (roleId === 'super-admin' || roleId === 'super-delivery') {
+      const snapshot = await getDocs(collection(db, 'shops'));
+      shops.value = snapshot.docs
+        .map((d: any) => ({ id: d.id, ...d.data() } as Shop))
+        .filter((s: Shop) => !s.deletedAt);
+      currentPage.value = 1;
+      loading.value = false;
+      return;
+    } else if (['store-admin', 'store-staff', 'store-delivery'].includes(roleId)) {
+      const [membersSnap, ownedSnap] = await Promise.all([
+        getDocs(query(collection(db, 'shopMembers'), where('uid', '==', uid))),
+        getDocs(query(collection(db, 'shops'), where('ownerId', '==', uid))),
+      ]);
+      shopIds = [
+        ...membersSnap.docs.map((d: any) => d.data().shopId),
+        ...ownedSnap.docs.map((d: any) => d.id),
+      ];
+    } else {
+      shops.value = [];
+      currentPage.value = 1;
+      loading.value = false;
+      return;
+    }
+
+    shopIds = [...new Set(shopIds)].filter(Boolean);
+    if (!shopIds.length) {
+      shops.value = [];
+      currentPage.value = 1;
+      loading.value = false;
+      return;
+    }
+
+    const chunks = [];
+    for (let i = 0; i < shopIds.length; i += 30) {
+      chunks.push(shopIds.slice(i, i + 30));
+    }
+    const snapshots = await Promise.all(
+      chunks.map(ids => getDocs(query(collection(db, 'shops'), where(documentId(), 'in', ids))))
+    );
+    shops.value = snapshots
+      .flatMap(s => s.docs.map((d: any) => ({ id: d.id, ...d.data() } as Shop)))
       .filter((s: Shop) => !s.deletedAt);
     currentPage.value = 1;
   } catch (e: any) {
@@ -510,6 +712,9 @@ onMounted(() => {
 .shops-page { max-width: 1200px; margin: 0 auto; }
 .page-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; margin-bottom: 28px; }
 .header-left { display: flex; align-items: center; gap: 16px; }
+.header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.search-input { min-width: 240px; padding: 10px 14px; border-radius: 12px; border: 1px solid #e2e8f0; font-size: 14px; outline: none; }
+.search-input:focus { border-color: #fbbf24; box-shadow: 0 0 0 3px rgba(251,191,36,0.15); }
 .header-icon { width: 52px; height: 52px; border-radius: 14px; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 24px rgba(251,191,36,0.25); }
 .page-title { font-size: 28px; font-weight: 900; margin: 0 0 4px; color: #0f172a; }
 .page-subtitle { font-size: 14px; color: #64748b; margin: 0; }
@@ -569,6 +774,18 @@ onMounted(() => {
 .field.check { flex-direction: row; align-items: center; }
 .checkbox { display: flex; align-items: center; gap: 8px; font-weight: 600; color: #0f172a; text-transform: none; cursor: pointer; }
 .error { margin-top: 12px; font-size: 13px; color: #dc2626; background: #fef2f2; padding: 10px 12px; border-radius: 10px; }
+.member-add-row { display: flex; gap: 10px; align-items: center; }
+.member-add-row .input { padding: 10px 14px; border-radius: 10px; border: 1px solid #e2e8f0; font-size: 14px; outline: none; }
+.btn-icon.members { color: #7e22ce; }
+.btn-icon.members:hover { background: #faf5ff; border-color: #e9d5ff; }
+.member-add-row .input { flex: 1; }
+.member-role { max-width: 130px; }
+.member-success { margin-top: 12px; font-size: 13px; color: #16a34a; background: #f0fdf4; padding: 10px 12px; border-radius: 10px; }
+.member-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.member-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid #f1f5f9; border-radius: 10px; background: #fafafa; }
+.member-name { font-size: 14px; font-weight: 700; color: #0f172a; }
+.member-meta { font-size: 12px; color: #64748b; margin-top: 8px; }
+.member-item .member-meta { margin-top: 2px; }
 .pagination { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-top: 1px solid #f1f5f9; background: #fff; }
 .page-info { font-size: 14px; color: #64748b; font-weight: 600; }
 @media (max-width: 640px) {

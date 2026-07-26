@@ -59,10 +59,6 @@
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" fill="currentColor"/></svg>
                   <span>Dashboard</span>
                 </NuxtLink>
-                <NuxtLink to="/dashboard" class="user-menu-item" @click="userMenuOpen = false">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M19.14 12.94c.04.3.06.61.06.94 0 .32-.02.64-.06.94l2.14 1.68c.19.15.24.42.12.64l-2.03 3.51c-.12.22-.37.3-.59.22l-2.52-1.01c-.53.4-1.11.74-1.74 1l-.37 2.68c-.04.25-.26.45-.52.45h-4.06c-.26 0-.48-.2-.52-.45l-.37-2.68c-.63-.26-1.21-.6-1.74-1l-2.52 1.01c-.22.08-.47 0-.59-.22l-2.03-3.51c-.12-.22-.07-.49.12-.64l2.14-1.68c-.04-.3-.06-.62-.06-.94s.02-.64.06-.94L4.46 8.92c-.19-.15-.24-.42-.12-.64l2.03-3.51c.12-.22.37-.3.59-.22l2.52 1.01c.53-.4 1.11-.74 1.74-1l.37-2.68c.04-.25.26-.45.52-.45h4.06c.26 0 .48.2.52.45l.37 2.68c.63.26 1.21.6 1.74 1l2.52-1.01c.22-.08.47 0 .59.22l2.03 3.51c.12.22.07.49-.12.64l-2.14 1.68zM12 15.5c1.93 0 3.5-1.57 3.5-3.5S13.93 8.5 12 8.5 8.5 10.07 8.5 12s1.57 3.5 3.5 3.5z" fill="currentColor"/></svg>
-                  <span>Settings</span>
-                </NuxtLink>
                 <div class="user-menu-divider"></div>
                 <button class="user-menu-item logout-item" @click="userMenuOpen = false; handleLogout()">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" fill="currentColor"/></svg>

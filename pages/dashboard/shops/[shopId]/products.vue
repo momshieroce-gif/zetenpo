@@ -93,6 +93,19 @@ const removeImage = (index: number) => {
   imagePreviews.value.splice(index, 1);
 };
 
+const moveExistingImage = (index: number, direction: number) => {
+  const newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= existingImages.value.length) return;
+  [existingImages.value[index], existingImages.value[newIndex]] = [existingImages.value[newIndex], existingImages.value[index]];
+};
+
+const moveImage = (index: number, direction: number) => {
+  const newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= imagePreviews.value.length) return;
+  [imagePreviews.value[index], imagePreviews.value[newIndex]] = [imagePreviews.value[newIndex], imagePreviews.value[index]];
+  [imageFiles.value[index], imageFiles.value[newIndex]] = [imageFiles.value[newIndex], imageFiles.value[index]];
+};
+
 const fetchShop = async () => {
   if (!db) return;
   try {
@@ -105,6 +118,13 @@ const fetchShop = async () => {
   }
 };
 
+const timestampToMillis = (v: any) => {
+  if (!v) return 0;
+  if (typeof v.toMillis === 'function') return v.toMillis();
+  if (typeof v.getTime === 'function') return v.getTime();
+  return 0;
+};
+
 const fetchProducts = async () => {
   if (!db) return;
   loading.value = true;
@@ -114,7 +134,8 @@ const fetchProducts = async () => {
     const snap = await getDocs(q);
     products.value = snap.docs
       .map((d: any) => ({ id: d.id, ...d.data() } as Product))
-      .filter((p: Product) => !p.deletedAt);
+      .filter((p: Product) => !p.deletedAt)
+      .sort((a: Product, b: Product) => timestampToMillis(b.createdAt) - timestampToMillis(a.createdAt));
   } catch (e: any) {
     fetchError.value = e?.message || 'Failed to load products.';
   } finally {
@@ -232,11 +253,15 @@ onMounted(() => {
               <div v-if="existingImages.length" class="preview-list existing">
                 <div v-for="(url, i) in existingImages" :key="'existing-' + i" class="preview-thumb">
                   <img :src="url" alt="Existing" />
+                  <button v-if="i > 0" type="button" class="move-thumb left" @click="moveExistingImage(i, -1)">&#10094;</button>
+                  <button v-if="i < existingImages.length - 1" type="button" class="move-thumb right" @click="moveExistingImage(i, 1)">&#10095;</button>
                 </div>
               </div>
               <div v-if="imagePreviews.length" class="preview-list">
                 <div v-for="(p, i) in imagePreviews" :key="i" class="preview-thumb">
                   <img :src="p.url" :alt="p.name" />
+                  <button v-if="i > 0" type="button" class="move-thumb left" @click="moveImage(i, -1)">&#10094;</button>
+                  <button v-if="i < imagePreviews.length - 1" type="button" class="move-thumb right" @click="moveImage(i, 1)">&#10095;</button>
                   <button type="button" class="remove-thumb" @click="removeImage(i)">&times;</button>
                 </div>
               </div>
@@ -377,4 +402,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .preview-thumb { position: relative; width: 70px; height: 70px; border-radius: 10px; overflow: hidden; border: 1px solid #e2e8f0; }
 .preview-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .remove-thumb { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,0.5); color: #fff; border: none; font-size: 14px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.move-thumb { position: absolute; bottom: 2px; width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,0.5); color: #fff; border: none; font-size: 10px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.move-thumb.left { left: 2px; }
+.move-thumb.right { right: 2px; }
 </style>
