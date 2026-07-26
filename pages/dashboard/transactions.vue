@@ -115,6 +115,18 @@
               <span class="detail-label">Delivery Address</span>
               <span class="detail-value">{{ selectedTransaction.delivery_location?.address || '-' }}</span>
             </div>
+            <div class="detail-item full">
+              <span class="detail-label">Store Location</span>
+              <a class="detail-value map-link" :href="mapUrl(selectedTransaction.store_location)" target="_blank" rel="noopener">
+                {{ shopMap[selectedTransaction.store_id] || 'Store' }} — Show Drive Map
+              </a>
+            </div>
+            <div class="detail-item full">
+              <span class="detail-label">User Location</span>
+              <a class="detail-value map-link" :href="mapUrl(selectedTransaction.user_location)" target="_blank" rel="noopener">
+                Receiver — Show Drive Map
+              </a>
+            </div>
           </div>
 
           <div class="section-title">Items</div>
@@ -198,6 +210,17 @@ const loading = ref(true);
 const fetchError = ref('');
 const shopMap = ref<Record<string, string>>({});
 
+const userLat = ref<number | null>(null);
+const userLng = ref<number | null>(null);
+
+const getUserLocation = () => {
+  if (!process.client || !navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => { userLat.value = pos.coords.latitude; userLng.value = pos.coords.longitude; },
+    () => { /* silently ignore */ }
+  );
+};
+
 const perPage = 20;
 const currentPage = ref(1);
 const totalPages = computed(() => Math.ceil(transactions.value.length / perPage) || 1);
@@ -251,6 +274,12 @@ const formatMoney = (value?: number) => {
   } catch {
     return `₱${value.toFixed(2)}`;
   }
+};
+
+const mapUrl = (location?: { latitude?: number; longitude?: number }) => {
+  if (location?.latitude == null || location?.longitude == null) return '#';
+  const originParam = userLat.value != null && userLng.value != null ? `origin=${userLat.value},${userLng.value}&` : '';
+  return `https://www.google.com/maps/dir/?api=1&${originParam}destination=${location.latitude},${location.longitude}&travelmode=two-wheeler&dir_action=navigate`;
 };
 
 const humanize = (str: string) => str.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -322,6 +351,7 @@ const fetchTransactions = async () => {
 };
 
 onMounted(() => {
+  getUserLocation();
   fetchTransactions();
 });
 </script>
@@ -385,6 +415,8 @@ onMounted(() => {
 .detail-item.full { grid-column: span 2; }
 .detail-label { font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
 .detail-value { font-size: 14px; font-weight: 600; color: #0f172a; }
+.map-link { color: #4f46e5; text-decoration: none; }
+.map-link:hover { text-decoration: underline; }
 .section-title { font-size: 14px; font-weight: 800; color: #0f172a; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.5px; }
 .items-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
 .items-table th { text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }

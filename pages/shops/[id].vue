@@ -11,10 +11,20 @@ const products = ref<Product[]>([]);
 const loading = ref(true);
 const page = ref(1);
 const pageSize = 10;
-const { addToCart } = useCart();
+const { cart, addToCart } = useCart();
 
 const totalPages = computed(() => Math.ceil(products.value.length / pageSize));
 const paginatedProducts = computed(() => products.value.slice((page.value - 1) * pageSize, page.value * pageSize));
+const showMultiShopModal = ref(false);
+
+const handleAddToCart = (product: Product) => {
+  const cartShopId = cart.value.length ? cart.value[0].product.shopId : null;
+  if (cartShopId && cartShopId !== shopId) {
+    showMultiShopModal.value = true;
+    return;
+  }
+  addToCart(product);
+};
 
 useHead({
   title: computed(() => (shop.value?.name ? `${shop.value.name} | My Near Shops` : 'Shop | My Near Shops')),
@@ -88,7 +98,7 @@ onMounted(fetchData);
               <div v-if="product.stock !== undefined" class="product-stock">{{ product.stock }} in stock</div>
             <div class="product-actions">
               <NuxtLink :to="`/items/${product.id}`" class="view-btn">View</NuxtLink>
-              <button class="add-btn" @click.stop="addToCart(product)">Add to Cart</button>
+              <button class="add-btn" @click.stop="handleAddToCart(product)">Add to Cart</button>
             </div>
             </div>
           </div>
@@ -98,6 +108,22 @@ onMounted(fetchData);
           <button class="page-btn" :disabled="page === 1" @click="page--">Previous</button>
           <span class="page-info">Page {{ page }} of {{ totalPages }}</span>
           <button class="page-btn" :disabled="page === totalPages" @click="page++">Next</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showMultiShopModal" class="modal-overlay" @click.self="showMultiShopModal = false">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Multiple shops detected</h3>
+          <button class="close-btn" @click="showMultiShopModal = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p>Your cart already has products from another shop. Complete your previous order first before adding items from this shop.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="modal-btn modal-btn-ghost" @click="showMultiShopModal = false">Continue Shopping</button>
+          <NuxtLink to="/cart" class="modal-btn modal-btn-primary" @click="showMultiShopModal = false">Go to Cart</NuxtLink>
         </div>
       </div>
     </div>
@@ -377,4 +403,16 @@ onMounted(fetchData);
   font-size: 14px;
   font-weight: 600;
 }
+.modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.55); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 100; }
+.modal-card { background: #fff; border-radius: 20px; width: 100%; max-width: 440px; box-shadow: 0 24px 60px rgba(15,23,42,0.25); }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #f1f5f9; }
+.modal-header h3 { margin: 0; font-size: 18px; font-weight: 900; color: #0f172a; }
+.close-btn { background: none; border: none; font-size: 28px; line-height: 1; color: #94a3b8; cursor: pointer; }
+.modal-body { padding: 24px; color: #475569; font-size: 15px; line-height: 1.5; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 24px; border-top: 1px solid #f1f5f9; background: #f8fafc; border-radius: 0 0 20px 20px; }
+.modal-btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 18px; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; text-decoration: none; border: none; }
+.modal-btn-primary { background: #f59e0b; color: #fff; }
+.modal-btn-primary:hover { background: #d97706; }
+.modal-btn-ghost { background: transparent; color: #64748b; }
+.modal-btn-ghost:hover { background: #f1f5f9; }
 </style>

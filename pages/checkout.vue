@@ -151,7 +151,7 @@
 <script setup lang="ts">
 import { GoogleMap, AdvancedMarker, InfoWindow } from 'vue3-google-map';
 import { ref, computed, watch, onMounted } from 'vue';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import type { Shop } from '~/types';
 
 definePageMeta({ middleware: 'auth' });
@@ -416,11 +416,57 @@ const processOrder = async () => {
     mobileError.value = 'Please enter a valid mobile number.';
     return;
   }
+  const db = nuxtApp.$firebase?.db;
+  const auth = nuxtApp.$firebase?.auth;
+  if (!db || !shop.value || !cart.value.length) {
+    mobileError.value = 'Order information is incomplete. Please try again.';
+    return;
+  }
   isSubmitting.value = true;
-  await new Promise((resolve) => setTimeout(resolve, 1200));
-  clearCart();
-  isSubmitting.value = false;
-  navigateTo('/cart');
+  try {
+    const userId = auth?.currentUser?.uid || '';
+    const orderItems = cart.value.map((item) => {
+      const price = Number(item.product.price || 0);
+      const qty = item.qty;
+      return {
+        product_id: item.product.id,
+        shop_id: item.product.shopId,
+        name: item.product.name,
+        price,
+        qty,
+        subtotal: parseFloat((price * qty).toFixed(2)),
+      };
+    });
+    const subtotalValue = parseFloat(orderItems.reduce((sum, item) => sum + item.subtotal, 0).toFixed(2));
+    const deliveryChargeValue = deliveryCharge.value;
+    const totalValue = parseFloat((subtotalValue + deliveryChargeValue).toFixed(2));
+    const orderNumber = `TRX-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+    await addDoc(collection(db, 'transactions'), {
+      order_number: orderNumber,
+      user_id: userId,
+      store_id: shop.value.id,
+      user_location: { latitude: userLat.value, longitude: userLng.value },
+      store_location: { latitude: shop.value.latitude, longitude: shop.value.longitude },
+      delivery_location: { latitude: userLat.value, longitude: userLng.value, address: searchLocation.value || '' },
+      delivery_method: deliveryMethod.value || 'delivery',
+      payment_method: paymentMethod.value || 'cash',
+      items: orderItems,
+      subtotal: subtotalValue,
+      delivery_charge: deliveryChargeValue,
+      total: totalValue,
+      customer_mobile: mobile.value.replace(/\s/g, ''),
+      customer_note: note.value,
+      status: 'pending',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    clearCart();
+    navigateTo('/cart');
+  } catch (e: any) {
+    mobileError.value = e?.message || 'Order failed. Please try again.';
+  } finally {
+    isSubmitting.value = false;
+  }
 };
 
 onMounted(() => {
