@@ -120,8 +120,8 @@
       </div>
       <div class="chart-card">
         <div class="chart-header">
-          <div class="chart-title">Orders Last 7 Days</div>
-          <div class="chart-total">{{ formatCurrency(summary.revenue) }} total revenue</div>
+          <div class="chart-title">{{ isCustomer ? 'My Purchases Last 7 Days' : 'Orders Last 7 Days' }}</div>
+          <div class="chart-total">{{ formatCurrency(summary.revenue) }} {{ isCustomer ? 'total spent' : 'total revenue' }}</div>
         </div>
         <div class="bar-chart">
           <div v-for="bar in chartData" :key="bar.label" class="bar-group">

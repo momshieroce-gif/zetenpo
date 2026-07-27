@@ -73,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 
 interface Profile {
   id: string;
@@ -108,6 +108,7 @@ const messageType = ref('success');
 const detecting = ref(false);
 
 const form = ref({
+  uid: '',
   name: '',
   email: '',
   phone: '',
@@ -122,16 +123,16 @@ const loadProfile = async () => {
   fetchError.value = '';
   try {
     if (!db) throw new Error('Firebase is not available.');
-    const email = authStore.user?.email;
-    if (!email) throw new Error('No authenticated email found.');
-    const q = query(collection(db, 'users'), where('email', '==', email));
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) throw new Error('Profile not found.');
-    const data = snapshot.docs[0].data() as Omit<Profile, 'id'>;
-    profile.value = { id: snapshot.docs[0].id, ...data };
+    const uid = authStore.user?.uid;
+    if (!uid) throw new Error('No authenticated user found.');
+    const snapshot = await getDoc(doc(db, 'users', uid));
+    if (!snapshot.exists()) throw new Error('Profile not found.');
+    const data = snapshot.data() as Omit<Profile, 'id'>;
+    profile.value = { id: snapshot.id, ...data };
     form.value = {
+      uid: snapshot.id,
       name: data.name || data.displayName || '',
-      email: data.email || email,
+      email: data.email || authStore.user?.email || '',
       phone: data.phone || '',
       role: data.role || '',
       address: (data as any).address || '',

@@ -73,21 +73,24 @@
       <div class="modal-body">
         <form class="edit-form" @submit.prevent="saveUser">
           <div class="edit-grid">
-            <div class="form-group">
+            <div class="form-group full">
               <label>Name</label>
               <input v-model="editForm.name" type="text" class="form-input" />
             </div>
-            <div class="form-group">
+            <div class="form-group full">
               <label>Email</label>
-              <input v-model="editForm.email" type="email" class="form-input" />
+              <input v-model="editForm.email" type="email" class="form-input" disabled />
             </div>
-            <div class="form-group">
+            <div class="form-group" :class="{ full: !isSuperAdmin }">
               <label>Phone</label>
               <input v-model="editForm.phone" type="tel" class="form-input" />
             </div>
-            <div class="form-group">
+            <div v-if="isSuperAdmin" class="form-group">
               <label>Role</label>
-              <input v-model="editForm.role" type="text" class="form-input" />
+              <select v-model="editForm.roleId" class="form-input" @change="setRoleName">
+                <option disabled value="">Select role</option>
+                <option v-for="r in roles" :key="r.id" :value="r.id">{{ r.name }}</option>
+              </select>
             </div>
             <div class="form-group full">
               <label>Status</label>
@@ -109,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-import { collection, doc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { collection, doc, documentId, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 
 interface User {
   id: string;
@@ -136,6 +139,27 @@ const nuxtApp = useNuxtApp() as any;
 const db = nuxtApp.$firebase?.db;
 const authStore = useAuthStore();
 
+const isSuperAdmin = computed(() => authStore.user?.roleId === 'super-admin');
+
+const roles = ref<{ id: string; name: string; level?: number }[]>([]);
+
+const fetchRoles = async () => {
+  try {
+    if (!db) return;
+    const snapshot = await getDocs(collection(db, 'roles'));
+    roles.value = snapshot.docs
+      .map((d: any) => ({ id: d.id, ...d.data() } as { id: string; name: string; level?: number }))
+      .sort((a, b) => (a.level || 0) - (b.level || 0));
+  } catch (e) {
+    console.error('Failed to load roles:', e);
+  }
+};
+
+const setRoleName = () => {
+  const role = roles.value.find((r: { id: string; name: string; level?: number }) => r.id === editForm.value.roleId);
+  editForm.value.role = role?.name || '';
+};
+
 const users = ref<User[]>([]);
 const loading = ref(true);
 const fetchError = ref('');
@@ -159,7 +183,17 @@ const showModal = ref(false);
 const saving = ref(false);
 const editError = ref('');
 const selectedUser = ref<User | null>(null);
-const editForm = ref({ name: '', email: '', phone: '', role: '', isActive: true });
+const editForm = ref({ name: '', email: '', phone: '', roleId: '', role: '', isActive: true });
+
+const resolveRoleId = (user: User) => {
+  if (user.roleId && roles.value.some((r: { id: string }) => r.id === user.roleId)) return user.roleId;
+  const roleValue = (user.role || '').toLowerCase().trim();
+  if (!roleValue) return '';
+  const match = roles.value.find(
+    (r: { id: string; name: string }) => r.id.toLowerCase() === roleValue || r.name.toLowerCase() === roleValue
+  );
+  return match?.id || '';
+};
 
 const openEdit = (user: User) => {
   selectedUser.value = user;
@@ -167,6 +201,7 @@ const openEdit = (user: User) => {
     name: user.name || user.displayName || '',
     email: user.email || '',
     phone: user.phone || '',
+    roleId: resolveRoleId(user),
     role: user.role || '',
     isActive: user.isActive !== false,
   };
@@ -183,23 +218,22 @@ const saveUser = async () => {
   editError.value = '';
   try {
     if (!db) throw new Error('Firebase is not available.');
-    await updateDoc(doc(db, 'users', selectedUser.value.id), {
+    const payload: Record<string, any> = {
       name: editForm.value.name,
       displayName: editForm.value.name,
-      email: editForm.value.email,
       phone: editForm.value.phone,
-      role: editForm.value.role,
       isActive: editForm.value.isActive,
+    };
+    if (isSuperAdmin.value) {
+      setRoleName();
+      payload.roleId = editForm.value.roleId;
+      payload.role = editForm.value.role;
+    }
+    await updateDoc(doc(db, 'users', selectedUser.value.id), {
+      ...payload,
       updatedAt: serverTimestamp(),
     });
-    Object.assign(selectedUser.value, {
-      name: editForm.value.name,
-      displayName: editForm.value.name,
-      email: editForm.value.email,
-      phone: editForm.value.phone,
-      role: editForm.value.role,
-      isActive: editForm.value.isActive,
-    });
+    Object.assign(selectedUser.value, payload);
     showModal.value = false;
   } catch (e: any) {
     console.error('Save user failed:', e, {
@@ -232,8 +266,63 @@ const fetchUsers = async () => {
   fetchError.value = '';
   try {
     if (!db) throw new Error('Firebase is not available.');
-    const snapshot = await getDocs(collection(db, 'users'));
-    const fetched: User[] = snapshot.docs.map((d: any) => ({ id: d.id, ...d.data() } as User));
+    const uid = authStore.user?.uid || '';
+    const roleId = authStore.user?.roleId || '';
+
+    if (roleId === 'super-admin') {
+      const snapshot = await getDocs(collection(db, 'users'));
+      const fetched: User[] = snapshot.docs.map((d: any) => ({ id: d.id, ...d.data() } as User));
+      fetched.sort((a, b) => (a.name || a.displayName || '').localeCompare(b.name || b.displayName || ''));
+      users.value = fetched;
+      currentPage.value = 1;
+      return;
+    }
+
+    if (roleId !== 'store-admin' && roleId !== 'store-staff') {
+      users.value = [];
+      currentPage.value = 1;
+      return;
+    }
+
+    const myMemberships = await getDocs(query(collection(db, 'shopMembers'), where('uid', '==', uid)));
+    let shopIds = myMemberships.docs.map((d: any) => d.data().shopId).filter(Boolean);
+    shopIds = [...new Set(shopIds)];
+
+    if (!shopIds.length) {
+      users.value = [];
+      currentPage.value = 1;
+      return;
+    }
+
+    const memberChunks: string[][] = [];
+    for (let i = 0; i < shopIds.length; i += 30) {
+      memberChunks.push(shopIds.slice(i, i + 30));
+    }
+    const memberSnapshots = await Promise.all(
+      memberChunks.map(ids => getDocs(query(collection(db, 'shopMembers'), where('shopId', 'in', ids))))
+    );
+    const userIds = [
+      ...new Set([
+        ...memberSnapshots.flatMap((s: any) => s.docs.map((d: any) => d.data().uid)),
+        uid,
+      ])
+    ].filter(Boolean);
+
+    if (!userIds.length) {
+      users.value = [];
+      currentPage.value = 1;
+      return;
+    }
+
+    const userChunks: string[][] = [];
+    for (let i = 0; i < userIds.length; i += 30) {
+      userChunks.push(userIds.slice(i, i + 30));
+    }
+    const userSnapshots = await Promise.all(
+      userChunks.map(ids => getDocs(query(collection(db, 'users'), where(documentId(), 'in', ids))))
+    );
+    const fetched: User[] = userSnapshots
+      .flatMap((s: any) => s.docs.map((d: any) => ({ id: d.id, ...d.data() } as User)));
     fetched.sort((a, b) => (a.name || a.displayName || '').localeCompare(b.name || b.displayName || ''));
     users.value = fetched;
     currentPage.value = 1;
@@ -245,6 +334,7 @@ const fetchUsers = async () => {
 };
 
 onMounted(() => {
+  fetchRoles();
   fetchUsers();
 });
 </script>
@@ -301,6 +391,7 @@ onMounted(() => {
 .form-group label { font-size: 12px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
 .form-input { padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 14px; color: #0f172a; outline: none; }
 .form-input:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
+.form-input:disabled { background: #f8fafc; color: #94a3b8; cursor: not-allowed; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .edit-error { color: #ef4444; font-size: 13px; font-weight: 600; }
 @media (max-width: 640px) {

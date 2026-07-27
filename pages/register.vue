@@ -1,5 +1,5 @@
 <template>
-  <div class="login-page">
+  <div class="register-page">
     <div class="brand-panel">
       <div class="brand-bg">
         <div class="orb orb-1"></div>
@@ -13,8 +13,8 @@
           </div>
           <span>My Near Shops</span>
         </NuxtLink>
-        <h1 class="brand-headline">Shop local,<br><span class="gradient-text">live better.</span></h1>
-        <p class="brand-desc">Discover hundreds of local stores, compare prices, and get same-day delivery all in one place.</p>
+        <h1 class="brand-headline">Join us,<br><span class="gradient-text">shop smarter.</span></h1>
+        <p class="brand-desc">Create your free account and start discovering local shops, comparing prices, and getting same-day delivery.</p>
         <ul class="brand-features">
           <li>500+ verified shops</li>
           <li>Fast same-day delivery</li>
@@ -27,47 +27,48 @@
       <div class="form-card">
         <div class="form-header">
           <div class="form-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 17c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM12 6c1.66 0 3 1.34 3 3v2H9V9c0-1.66 1.34-3 3-3z" fill="#fff"/></svg>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 14c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4zm-9-4V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 2c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z" fill="#fff"/></svg>
           </div>
           <div>
-            <h2 class="form-title">Welcome back</h2>
-            <p class="form-subtitle">Sign in to continue to your account</p>
+            <h2 class="form-title">Create account</h2>
+            <p class="form-subtitle">Sign up free and start shopping local</p>
           </div>
         </div>
 
-        <form class="login-form" @submit.prevent="signIn">
+        <form class="register-form" @submit.prevent="register">
+          <div class="field">
+            <label class="field-label">Full name</label>
+            <input v-model="name" type="text" class="input" placeholder="John Doe" required autocomplete="name" />
+          </div>
           <div class="field">
             <label class="field-label">Email address</label>
             <input v-model="email" type="email" class="input" placeholder="you@example.com" required autocomplete="email" />
           </div>
           <div class="field">
+            <label class="field-label">Phone (optional)</label>
+            <input v-model="phone" type="tel" class="input" placeholder="+1234567890" autocomplete="tel" />
+          </div>
+          <div class="field">
             <label class="field-label">Password</label>
             <div class="password-wrap">
-              <input v-model="password" :type="showPassword ? 'text' : 'password'" class="input" placeholder="Enter your password" required autocomplete="current-password" />
+              <input v-model="password" :type="showPassword ? 'text' : 'password'" class="input" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password" />
               <button type="button" class="toggle-password" @click="showPassword = !showPassword">{{ showPassword ? 'Hide' : 'Show' }}</button>
             </div>
           </div>
-          <div class="forgot-row">
-            <NuxtLink to="/forgot-password" class="forgot-link">Forgot password?</NuxtLink>
+          <div class="field">
+            <label class="field-label">Confirm password</label>
+            <input v-model="confirmPassword" :type="showPassword ? 'text' : 'password'" class="input" placeholder="Re-enter your password" required minlength="6" autocomplete="new-password" />
           </div>
           <button type="submit" class="btn btn-primary w-full" :disabled="loading">
-            <span v-if="loading">Signing in...</span>
-            <span v-else>Sign in to account</span>
+            <span v-if="loading">Creating account...</span>
+            <span v-else>Create free account</span>
           </button>
           <div v-if="error" class="error-message">{{ error }}</div>
         </form>
 
-        <div class="or-divider"><span class="line"></span><span class="or-text">or continue with</span><span class="line"></span></div>
-
-        <button class="social-btn google" :disabled="loading" @click="signInWithGoogle">
-          <span class="sb-icon">
-            <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908C16.658 14.251 17.64 11.945 17.64 9.2z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
-          </span>
-          <span>Continue with Google</span>
-        </button>
         <div class="form-footer">
-          Don't have an account?
-          <NuxtLink to="/register" class="register-link">Create one free</NuxtLink>
+          Already have an account?
+          <NuxtLink to="/login" class="login-link">Sign in</NuxtLink>
         </div>
       </div>
     </div>
@@ -75,97 +76,79 @@
 </template>
 
 <script setup lang="ts">
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
-import { collection, doc, getDoc, query, where, getDocs, setDoc, serverTimestamp } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 definePageMeta({ ssr: false });
-useHead({ title: 'Login | My Near Shops' });
+useHead({ title: 'Register | My Near Shops' });
 
 const { $firebase } = useNuxtApp() as any;
 const authStore = useAuthStore();
 const router = useRouter();
 
+const name = ref('');
 const email = ref('');
+const phone = ref('');
 const password = ref('');
+const confirmPassword = ref('');
 const showPassword = ref(false);
 const loading = ref(false);
 const error = ref('');
 
-const hashPassword = async (password: string) => {
+const hashPassword = async (value: string) => {
   const cryptoObj = (globalThis as any).crypto;
-  const buf = await cryptoObj.subtle.digest('SHA-256', new TextEncoder().encode(password));
+  const buf = await cryptoObj.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 };
 
-const signIn = async () => {
+const register = async () => {
   error.value = '';
-  loading.value = true;
-  try {
-    const db = $firebase.db;
-    const cred = await signInWithEmailAndPassword($firebase.auth, email.value, password.value);
-    const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
-    if (!userDoc.exists()) throw new Error('User account not found.');
-    const data = userDoc.data() as any;
-    const profile = {
-      uid: cred.user.uid,
-      email: data.email || cred.user.email,
-      displayName: data.name || data.displayName || cred.user.displayName,
-      photoURL: data.photoURL || cred.user.photoURL,
-      roleId: data.roleId || '',
-      role: data.role || '',
-    };
-    authStore.setUser(profile as any);
-    document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(profile))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-    await router.push('/dashboard');
-  } catch (e: any) {
-    error.value = e?.message || 'Sign in failed. Please try again.';
-  } finally {
-    loading.value = false;
+  if (password.value !== confirmPassword.value) {
+    error.value = 'Passwords do not match.';
+    return;
   }
-};
-
-const signInWithGoogle = async () => {
-  error.value = '';
   loading.value = true;
   try {
     const db = $firebase.db;
-    const provider = new GoogleAuthProvider();
-    const cred = await signInWithPopup($firebase.auth, provider);
-    const userRef = doc(db, 'users', cred.user.uid);
-    const userDoc = await getDoc(userRef);
-    let data: any;
-    if (userDoc.exists()) {
-      data = userDoc.data();
-    } else {
-      data = {
-        name: cred.user.displayName || '',
-        displayName: cred.user.displayName || '',
-        email: cred.user.email || '',
-        phone: cred.user.phoneNumber || '',
-        photoURL: cred.user.photoURL || '',
-        roleId: 'customer',
-        role: 'Customer',
-        isActive: true,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
-      await setDoc(userRef, data);
-    }
+    if (!db || !$firebase.auth) throw new Error('Firebase is not available.');
+
+    const cred = await createUserWithEmailAndPassword($firebase.auth, email.value, password.value);
+    await updateProfile(cred.user, { displayName: name.value });
+
+    await setDoc(doc(db, 'users', cred.user.uid), {
+      name: name.value,
+      displayName: name.value,
+      email: email.value,
+      phone: phone.value || '',
+      password_hash: await hashPassword(password.value),
+      roleId: 'customer',
+      role: 'Customer',
+      isActive: true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
     const profile = {
       uid: cred.user.uid,
-      email: data.email || cred.user.email,
-      displayName: data.name || data.displayName || cred.user.displayName,
-      photoURL: data.photoURL || cred.user.photoURL,
-      roleId: data.roleId || '',
-      role: data.role || '',
+      email: email.value,
+      displayName: name.value,
+      photoURL: cred.user.photoURL,
+      roleId: 'customer',
+      role: 'Customer',
     };
     authStore.setUser(profile as any);
     document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(profile))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
     await router.push('/dashboard');
   } catch (e: any) {
-    error.value = e?.message || 'Google sign in failed.';
+    if (e?.code === 'auth/email-already-in-use') {
+      error.value = 'This email is already registered. Try signing in instead.';
+    } else if (e?.code === 'auth/weak-password') {
+      error.value = 'Password is too weak. Use at least 6 characters.';
+    } else {
+      error.value = e?.message || 'Registration failed. Please try again.';
+    }
   } finally {
     loading.value = false;
   }
@@ -173,7 +156,7 @@ const signInWithGoogle = async () => {
 </script>
 
 <style scoped>
-.login-page { display: flex; min-height: 100vh; }
+.register-page { display: flex; min-height: 100vh; }
 .brand-panel { flex: 0 0 44%; position: relative; background: linear-gradient(145deg, #0f172a 0%, #1e293b 50%, #111827 100%); color: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .brand-bg { position: absolute; inset: 0; }
 .orb { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.25; animation: floatOrb 10s ease-in-out infinite; }
@@ -197,31 +180,20 @@ const signInWithGoogle = async () => {
 .form-icon { width: 52px; height: 52px; border-radius: 14px; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(251,191,36,0.25); }
 .form-title { font-size: 26px; font-weight: 800; margin: 0 0 4px; color: #0f172a; }
 .form-subtitle { font-size: 14px; color: #64748b; margin: 0; }
-.login-form { display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; }
+.register-form { display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; }
 .field { display: flex; flex-direction: column; gap: 7px; }
 .field-label { font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.6px; }
 .password-wrap { position: relative; }
 .password-wrap .input { padding-right: 70px; }
 .toggle-password { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #4f46e5; font-size: 12px; font-weight: 700; cursor: pointer; }
-.forgot-row { display: flex; justify-content: flex-end; margin-top: -4px; }
-.forgot-link { font-size: 13px; font-weight: 700; color: #4f46e5; transition: color 0.2s; }
-.forgot-link:hover { color: #6366f1; text-decoration: underline; }
 .btn-primary { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 50px; border-radius: 13px; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: #0f172a; font-weight: 800; font-size: 15px; border: none; cursor: pointer; box-shadow: 0 8px 20px rgba(251,191,36,0.35); transition: all 0.25s ease; }
 .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(251,191,36,0.45); }
 .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
 .w-full { width: 100%; }
 .error-message { font-size: 13px; color: #dc2626; background: #fef2f2; padding: 10px 12px; border-radius: 10px; margin-top: 4px; }
-.or-divider { display: flex; align-items: center; gap: 12px; margin: 24px 0; }
-.line { flex: 1; height: 1px; background: #e2e8f0; }
-.or-text { font-size: 12px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
-.social-btn { display: flex; align-items: center; gap: 12px; width: 100%; height: 50px; padding: 0 18px; border-radius: 13px; border: 1.5px solid #e2e8f0; background: #fff; cursor: pointer; font-size: 15px; font-weight: 600; color: #0f172a; margin-bottom: 12px; transition: all 0.22s; }
-.social-btn:hover:not(:disabled) { border-color: #fbbf24; box-shadow: 0 4px 14px rgba(251,191,36,0.12); }
-.social-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.sb-icon { display: flex; align-items: center; justify-content: center; }
-.soon { margin-left: auto; background: #f1f5f9; color: #64748b; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 20px; text-transform: uppercase; }
 .form-footer { text-align: center; font-size: 14px; color: #64748b; margin-top: 20px; }
-.register-link { color: #4f46e5; font-weight: 700; margin-left: 4px; }
-.register-link:hover { color: #6366f1; text-decoration: underline; }
+.login-link { color: #4f46e5; font-weight: 700; margin-left: 4px; }
+.login-link:hover { color: #6366f1; text-decoration: underline; }
 
 @media (max-width: 900px) {
   .brand-panel { display: none; }

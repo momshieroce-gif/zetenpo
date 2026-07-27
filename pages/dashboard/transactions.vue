@@ -173,7 +173,7 @@
 </template>
 
 <script setup lang="ts">
-import { collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, documentId, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 
 interface Transaction {
   id: string;
@@ -337,8 +337,9 @@ const fetchTransactions = async () => {
 
     let txQuery: any = collection(db, 'transactions');
     let shopIdFilter: string[] | null = null;
+    const isCustomer = roleId === 'customer';
 
-    if (roleId === 'customer') {
+    if (isCustomer) {
       txQuery = query(collection(db, 'transactions'), where('user_id', '==', uid));
     } else if (['store-admin', 'store-staff', 'store-delivery'].includes(roleId)) {
       const membersSnap = await getDocs(query(collection(db, 'shopMembers'), where('uid', '==', uid)));
@@ -346,16 +347,32 @@ const fetchTransactions = async () => {
     }
     // super-admin and super-delivery: no filtering
 
-    const [shopSnap, txSnap, statusSnap] = await Promise.all([
-      getDocs(collection(db, 'shops')),
+    const [txSnap, statusSnap] = await Promise.all([
       getDocs(txQuery),
       getDocs(collection(db, 'transaction_statuses')),
     ]);
-    shopMap.value = Object.fromEntries(shopSnap.docs.map((d: any) => [d.id, d.data().name || d.id]));
     statusList.value = statusSnap.docs.map((d: any) => d.data());
     let fetched: Transaction[] = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
     if (shopIdFilter) {
       fetched = fetched.filter(tx => tx.store_id && shopIdFilter!.includes(tx.store_id));
+    }
+
+    if (isCustomer) {
+      // Only fetch the shops referenced by the customer's own transactions
+      const storeIds = [...new Set(fetched.map(tx => tx.store_id).filter(Boolean))] as string[];
+      const chunks: string[][] = [];
+      for (let i = 0; i < storeIds.length; i += 30) {
+        chunks.push(storeIds.slice(i, i + 30));
+      }
+      const shopSnaps = await Promise.all(
+        chunks.map(ids => getDocs(query(collection(db, 'shops'), where(documentId(), 'in', ids))))
+      );
+      shopMap.value = Object.fromEntries(
+        shopSnaps.flatMap((s: any) => s.docs.map((d: any) => [d.id, d.data().name || d.id]))
+      );
+    } else {
+      const shopSnap = await getDocs(collection(db, 'shops'));
+      shopMap.value = Object.fromEntries(shopSnap.docs.map((d: any) => [d.id, d.data().name || d.id]));
     }
     fetched.sort((a, b) => {
       const da = toDate(a.createdAt)?.getTime() || 0;
