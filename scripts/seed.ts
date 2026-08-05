@@ -59,7 +59,7 @@ async function resetCollections(paths: string[]) {
 }
 
 async function seed() {
-  await resetCollections(['roles', 'users', 'shops', 'shopMembers', 'products', 'delivery_charge', 'delivery_methods', 'payment_methods', 'transactions']);
+  await resetCollections(['roles', 'users', 'shops', 'shopMembers', 'products', 'chats', 'delivery_charge', 'delivery_methods', 'payment_methods', 'transactions']);
 
   console.log('Starting Firestore seed...');
 
@@ -136,6 +136,7 @@ async function seed() {
       latitude: 10.3621945,
       longitude: 123.98721099999999,
       isActive: true,
+      emailVerified: true,
       address: 'Manila, Philippines',
     },
     {
@@ -149,6 +150,7 @@ async function seed() {
       latitude: 10.3621945,
       longitude: 123.98721099999999,
       isActive: true,
+      emailVerified: true,
       address: 'Manila, Philippines',
     },
     {
@@ -162,6 +164,7 @@ async function seed() {
       latitude: 10.3621945,
       longitude: 123.98721099999999,
       isActive: true,
+      emailVerified: true,
       address: 'Cebu, Philippines',
     },
     {
@@ -175,6 +178,7 @@ async function seed() {
       latitude: 10.3621945,
       longitude: 123.98721099999999,
       isActive: true,
+      emailVerified: true,
       address: 'Davao, Philippines',
     },
     {
@@ -188,6 +192,7 @@ async function seed() {
       latitude: 10.3621945,
       longitude: 123.98721099999999,
       isActive: true,
+      emailVerified: true,
       address: 'Manila, Philippines'
     },
     {
@@ -201,6 +206,7 @@ async function seed() {
       latitude: 10.3621945,
       longitude: 123.98721099999999,
       isActive: true,
+      emailVerified: true,
       address: 'Manila, Philippines',
     },
   ];
@@ -213,6 +219,7 @@ async function seed() {
         email: user.email,
         password: DEMO_PASSWORD,
         displayName: user.name,
+        emailVerified: true,
       });
       console.log(`Created Firebase Auth user ${user.email}.`);
     } catch (e: any) {
@@ -220,8 +227,24 @@ async function seed() {
         await admin.auth().updateUser(user.id, {
           email: user.email,
           password: DEMO_PASSWORD,
+          displayName: user.name,
+          emailVerified: true,
         });
         console.log(`Updated Firebase Auth user ${user.email}.`);
+      } else if (e.code === 'auth/email-already-exists') {
+        const conflict = await admin.auth().getUserByEmail(user.email);
+        if (conflict && conflict.uid !== user.id) {
+          await admin.auth().deleteUser(conflict.uid);
+          console.log(`Deleted conflicting Firebase Auth user ${conflict.email}.`);
+        }
+        await admin.auth().createUser({
+          uid: user.id,
+          email: user.email,
+          password: DEMO_PASSWORD,
+          displayName: user.name,
+          emailVerified: true,
+        });
+        console.log(`Re-created Firebase Auth user ${user.email}.`);
       } else {
         throw e;
       }
@@ -308,6 +331,7 @@ async function seed() {
   const nouns = ['Headphones', 'Backpack', 'Sneakers', 'Watch', 'Speaker', 'Bottle', 'Sunglasses', 'Jacket', 'Keyboard', 'Mouse', 'Wallet', 'Bag', 'Lamp', 'Notebook', 'Phone Case', 'Charger', 'Power Bank', 'Water Bottle', 'Travel Mug', 'Desk Mat', 'Yoga Mat', 'Tote', 'Beanie', 'Scarf', 'Gloves', 'Umbrella', 'Journal', 'Pillow', 'Stand', 'Hub', 'Cable', 'Adapter', 'Screen', 'Camera', 'Tripod', 'Flashlight', 'Toolkit', 'Speaker', 'Earbuds', 'Tracker', 'Router', 'Monitor', 'Mat', 'Planter', 'Frame', 'Clock', 'Rug', 'Chair', 'Shelf'];
   const categories = ['Electronics', 'Fashion', 'Home', 'Sports', 'Accessories', 'Gadgets', 'Lifestyle'];
   const productsPerShop = 10;
+  const productIds: string[] = [];
   let batch = db.batch();
   let batchCount = 0;
   let totalProducts = 0;
@@ -318,6 +342,7 @@ async function seed() {
       const noun = nouns[Math.floor(i / adjectives.length) % nouns.length];
       const category = categories[i % categories.length];
       const docRef = db.collection('products').doc();
+      productIds.push(docRef.id);
       batch.set(docRef, {
         shopId: shop.id,
         name: `${adj} ${noun} ${i + 1}`,
@@ -346,6 +371,59 @@ async function seed() {
     await batch.commit();
   }
   console.log(`Seeded ${totalProducts} products.`);
+
+  // --- Chats ---
+  const CHAT_COUNT = 5;
+  const cannedMessages = [
+    { sender: 'customer', text: 'Hi! Is this item still available?' },
+    { sender: 'shop', text: 'Hello! Yes, it is still in stock.' },
+    { sender: 'customer', text: 'Great! Can I see more photos?' },
+    { sender: 'shop', text: 'Sure, I will send additional photos shortly.' },
+    { sender: 'customer', text: 'Is the price negotiable?' },
+    { sender: 'shop', text: 'We can offer a small discount for bulk orders.' },
+    { sender: 'customer', text: 'Okay, I will place an order now. Thank you!' },
+    { sender: 'shop', text: 'Thank you for your purchase! Let us know if you need anything else.' },
+  ];
+  let totalChats = 0;
+  let totalMessages = 0;
+
+  for (let i = 0; i < CHAT_COUNT; i++) {
+    const customer = users[Math.floor(Math.random() * users.length)];
+    const productId = productIds[Math.floor(Math.random() * productIds.length)];
+    const productDoc = await db.collection('products').doc(productId).get();
+    const productData = productDoc.data();
+    if (!productData) continue;
+    const shopId = productData.shopId as string;
+
+    const chatRef = db.collection('chats').doc();
+    const messageCount = Math.floor(Math.random() * 4) + 2;
+    const chatMessages = cannedMessages.slice(0, messageCount);
+    const lastMessage = chatMessages[chatMessages.length - 1];
+
+    await chatRef.set({
+      userId: customer.id,
+      productId,
+      shopId,
+      lastMessage: lastMessage.text,
+      lastMessageAt: now(),
+      lastMessageSender: lastMessage.sender,
+      createdAt: now(),
+      updatedAt: now(),
+    });
+
+    for (const msg of chatMessages) {
+      await chatRef.collection('messages').add({
+        senderId: msg.sender === 'customer' ? customer.id : shopId,
+        senderType: msg.sender,
+        text: msg.text,
+        read: false,
+        createdAt: now(),
+      });
+      totalMessages++;
+    }
+    totalChats++;
+  }
+  console.log(`Seeded ${totalChats} chats with ${totalMessages} messages.`);
 
   // --- Delivery Charges ---
   const deliveryCharges = [];

@@ -35,7 +35,7 @@
           </div>
         </div>
 
-        <form class="register-form" @submit.prevent="register">
+        <form v-if="!emailSent" class="register-form" @submit.prevent="register">
           <div class="field">
             <label class="field-label">Full name</label>
             <input v-model="name" type="text" class="input" placeholder="John Doe" required autocomplete="name" />
@@ -66,6 +66,15 @@
           <div v-if="error" class="error-message">{{ error }}</div>
         </form>
 
+        <div v-else class="success-box">
+          <div class="success-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <p class="success-title">Verify your email</p>
+          <p class="success-desc">A verification link has been sent to <strong>{{ email }}</strong>. Please check your inbox (and spam) and verify your account before signing in.</p>
+          <NuxtLink to="/login" class="btn btn-primary w-full" style="text-decoration: none;">Go to Login</NuxtLink>
+        </div>
+
         <div class="form-footer">
           Already have an account?
           <NuxtLink to="/login" class="login-link">Sign in</NuxtLink>
@@ -76,15 +85,13 @@
 </template>
 
 <script setup lang="ts">
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signOut } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 definePageMeta({ ssr: false });
 useHead({ title: 'Register | My Near Shops' });
 
 const { $firebase } = useNuxtApp() as any;
-const authStore = useAuthStore();
-const router = useRouter();
 
 const name = ref('');
 const email = ref('');
@@ -94,6 +101,7 @@ const confirmPassword = ref('');
 const showPassword = ref(false);
 const loading = ref(false);
 const error = ref('');
+const emailSent = ref(false);
 
 const hashPassword = async (value: string) => {
   const cryptoObj = (globalThis as any).crypto;
@@ -126,21 +134,14 @@ const register = async () => {
       roleId: 'customer',
       role: 'Customer',
       isActive: true,
+      emailVerified: false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
 
-    const profile = {
-      uid: cred.user.uid,
-      email: email.value,
-      displayName: name.value,
-      photoURL: cred.user.photoURL,
-      roleId: 'customer',
-      role: 'Customer',
-    };
-    authStore.setUser(profile as any);
-    document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(profile))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-    await router.push('/dashboard');
+    await sendEmailVerification(cred.user);
+    await signOut($firebase.auth);
+    emailSent.value = true;
   } catch (e: any) {
     if (e?.code === 'auth/email-already-in-use') {
       error.value = 'This email is already registered. Try signing in instead.';
@@ -191,6 +192,10 @@ const register = async () => {
 .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
 .w-full { width: 100%; }
 .error-message { font-size: 13px; color: #dc2626; background: #fef2f2; padding: 10px 12px; border-radius: 10px; margin-top: 4px; }
+.success-box { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; margin-bottom: 24px; }
+.success-icon { width: 56px; height: 56px; border-radius: 50%; background: #f0fdf4; display: flex; align-items: center; justify-content: center; }
+.success-title { font-size: 18px; font-weight: 800; color: #0f172a; margin: 0; }
+.success-desc { font-size: 14px; color: #64748b; line-height: 1.6; margin: 0 0 8px; }
 .form-footer { text-align: center; font-size: 14px; color: #64748b; margin-top: 20px; }
 .login-link { color: #4f46e5; font-weight: 700; margin-left: 4px; }
 .login-link:hover { color: #6366f1; text-decoration: underline; }

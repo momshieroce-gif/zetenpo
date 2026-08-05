@@ -18,6 +18,6 @@ export default defineNuxtRouteMiddleware((to) => {
     if (user) authStore.setUser(user);
   }
   if (!authStore.isLoggedIn && to.path !== '/login') {
-    return navigateTo('/login');
+    return navigateTo({ path: '/login', query: { redirect: to.fullPath } });
   }
 });

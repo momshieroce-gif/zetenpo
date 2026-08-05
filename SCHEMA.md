@@ -87,6 +87,39 @@ interface Product {
 }
 ```
 
+## `chats`
+
+Chat threads between a customer and a shop about a specific product.
+
+```ts
+interface Chat {
+  id: string;                         // Firestore document ID
+  userId: string;                     // Reference to /users/{userId} (customer)
+  productId: string;                  // Reference to /products/{productId}
+  shopId: string;                     // Reference to /shops/{shopId}
+  lastMessage: string;
+  lastMessageAt: Timestamp;
+  lastMessageSender: 'customer' | 'shop';
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+```
+
+### `chats/{chatId}/messages`
+
+Messages within a chat thread (subcollection).
+
+```ts
+interface ChatMessage {
+  id: string;                         // Firestore document ID
+  senderId: string;                   // User ID (customer) or shop ID (shop)
+  senderType: 'customer' | 'shop';
+  text: string;
+  read: boolean;
+  createdAt: Timestamp;
+}
+```
+
 ## Indexes
 
 Add the following Firestore composite indexes to support common queries:

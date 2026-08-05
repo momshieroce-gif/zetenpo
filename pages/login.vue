@@ -75,7 +75,7 @@
 </template>
 
 <script setup lang="ts">
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup, signOut } from 'firebase/auth';
 import { collection, doc, getDoc, query, where, getDocs, setDoc, serverTimestamp } from 'firebase/firestore';
 
 definePageMeta({ ssr: false });
@@ -84,6 +84,7 @@ useHead({ title: 'Login | My Near Shops' });
 const { $firebase } = useNuxtApp() as any;
 const authStore = useAuthStore();
 const router = useRouter();
+const route = useRoute();
 
 const email = ref('');
 const password = ref('');
@@ -105,6 +106,10 @@ const signIn = async () => {
   try {
     const db = $firebase.db;
     const cred = await signInWithEmailAndPassword($firebase.auth, email.value, password.value);
+    if (!cred.user.emailVerified) {
+      await signOut($firebase.auth);
+      throw new Error('Please verify your email before signing in. Check your inbox for the verification link.');
+    }
     const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
     if (!userDoc.exists()) throw new Error('User account not found.');
     const data = userDoc.data() as any;
@@ -118,7 +123,8 @@ const signIn = async () => {
     };
     authStore.setUser(profile as any);
     document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(profile))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-    await router.push('/dashboard');
+    const redirectPath = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard';
+    await router.push(redirectPath);
   } catch (e: any) {
     error.value = e?.message || 'Sign in failed. Please try again.';
   } finally {
@@ -163,7 +169,8 @@ const signInWithGoogle = async () => {
     };
     authStore.setUser(profile as any);
     document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(profile))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-    await router.push('/dashboard');
+    const redirectPath = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard';
+    await router.push(redirectPath);
   } catch (e: any) {
     error.value = e?.message || 'Google sign in failed.';
   } finally {

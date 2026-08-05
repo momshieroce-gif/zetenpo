@@ -56,3 +56,24 @@ export interface Product {
   createdAt?: Date;
   updatedAt?: Date;
 }
+
+export interface Chat {
+  id: string;
+  userId: string;
+  productId: string;
+  shopId: string;
+  lastMessage: string;
+  lastMessageAt?: Date;
+  lastMessageSender: 'customer' | 'shop';
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderType: 'customer' | 'shop';
+  text: string;
+  read: boolean;
+  createdAt?: Date;
+}

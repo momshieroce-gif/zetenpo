@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { doc, getDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import type { Product, Shop } from '~/types';
 
 const route = useRoute();
+const router = useRouter();
+const authStore = useAuthStore();
 const productId = route.params.id as string;
 
 const nuxtApp = useNuxtApp() as any;
@@ -12,6 +14,7 @@ const loading = ref(true);
 const selectedImage = ref(0);
 const { cart, addToCart } = useCart();
 const added = ref(false);
+const inquiryLoading = ref(false);
 
 useHead({
   title: computed(() => (product.value?.name ? `${product.value.name} | My Near Shops` : 'Product | My Near Shops')),
@@ -47,6 +50,54 @@ const handleAddToCart = () => {
   addToCart(product.value);
   added.value = true;
   setTimeout(() => (added.value = false), 1500);
+};
+
+const handleInquire = async () => {
+  if (!product.value) return;
+  if (!authStore.isLoggedIn) {
+    return router.push({ path: '/login', query: { redirect: route.fullPath } });
+  }
+
+  inquiryLoading.value = true;
+  const db = nuxtApp.$firebase.db;
+  const chatsRef = collection(db, 'chats');
+  const existingQuery = query(
+    chatsRef,
+    where('userId', '==', authStore.user?.uid),
+    where('productId', '==', product.value.id)
+  );
+
+  const existingSnapshot = await getDocs(existingQuery);
+  if (!existingSnapshot.empty) {
+    const existingChat = existingSnapshot.docs[0];
+    inquiryLoading.value = false;
+    return router.push(`/chats/${existingChat.id}`);
+  }
+
+  const chatData = {
+    userId: authStore.user?.uid,
+    productId: product.value.id,
+    shopId: product.value.shopId,
+    lastMessage: 'Hi, I would like to inquire about this product.',
+    lastMessageAt: serverTimestamp(),
+    lastMessageSender: 'customer',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  const newChatDoc = doc(chatsRef);
+  await setDoc(newChatDoc, chatData);
+  const messagesRef = collection(newChatDoc, 'messages');
+  await addDoc(messagesRef, {
+    senderId: authStore.user?.uid,
+    senderType: 'customer',
+    text: 'Hi, I would like to inquire about this product.',
+    read: false,
+    createdAt: serverTimestamp(),
+  });
+
+  inquiryLoading.value = false;
+  router.push(`/chats/${newChatDoc.id}`);
 };
 
 onMounted(fetchData);
@@ -102,10 +153,16 @@ onMounted(fetchData);
               <span v-for="tag in product.tags" :key="tag" class="tag">{{ tag }}</span>
             </div>
 
-            <button class="add-to-cart" @click="handleAddToCart">
-              <span v-if="!added">Add to Cart</span>
-              <span v-else>Added!</span>
-            </button>
+            <div class="item-actions">
+              <button class="add-to-cart" @click="handleAddToCart">
+                <span v-if="!added">Add to Cart</span>
+                <span v-else>Added!</span>
+              </button>
+              <button class="inquire-btn" @click="handleInquire" :disabled="inquiryLoading">
+                <span v-if="!inquiryLoading">Inquire</span>
+                <span v-else>Opening chat...</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -366,38 +423,69 @@ onMounted(fetchData);
   border-radius: 20px;
 }
 
-.add-to-cart {
-  margin-top: auto;
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-  color: #1a1a1a;
-  border: none;
-  border-radius: 14px;
-  padding: 16px 32px;
-  font-size: 16px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 4px 14px rgba(251, 191, 36, 0.35);
-}
-
-.add-to-cart:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(251, 191, 36, 0.45);
-}
-
-@media (max-width: 900px) {
-  .item-detail {
-    grid-template-columns: 1fr;
+  .item-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: auto;
   }
-}
-.modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.55); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 100; }
-.modal-card { background: #fff; border-radius: 20px; width: 100%; max-width: 440px; box-shadow: 0 24px 60px rgba(15,23,42,0.25); }
-.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #f1f5f9; }
-.modal-header h3 { margin: 0; font-size: 18px; font-weight: 900; color: #0f172a; }
-.close-btn { background: none; border: none; font-size: 28px; line-height: 1; color: #94a3b8; cursor: pointer; }
-.modal-body { padding: 24px; color: #475569; font-size: 15px; line-height: 1.5; }
-.modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 24px; border-top: 1px solid #f1f5f9; background: #f8fafc; border-radius: 0 0 20px 20px; }
-.modal-btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 18px; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; text-decoration: none; border: none; }
+
+  .add-to-cart,
+  .inquire-btn {
+    flex: 1 1 180px;
+    min-width: 140px;
+    border: none;
+    border-radius: 14px;
+    padding: 16px 22px;
+    font-size: 16px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .add-to-cart {
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+    color: #1a1a1a;
+    box-shadow: 0 5px 18px rgba(251, 191, 36, 0.26);
+  }
+
+  .add-to-cart:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba(251, 191, 36, 0.35);
+  }
+
+  .inquire-btn {
+    background: #4c1d95;
+    color: #ffffff;
+    box-shadow: 0 5px 18px rgba(76, 29, 149, 0.22);
+  }
+
+  .inquire-btn:hover {
+    transform: translateY(-2px);
+    background: #6d28d9;
+    box-shadow: 0 10px 24px rgba(76, 29, 149, 0.32);
+  }
+
+  .inquire-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  @media (max-width: 900px) {
+    .item-detail {
+      grid-template-columns: 1fr;
+    }
+
+    .item-actions {
+      flex-direction: column;
+    }
+  }
+
 .modal-btn-primary { background: #f59e0b; color: #fff; }
 .modal-btn-primary:hover { background: #d97706; }
 .modal-btn-ghost { background: transparent; color: #64748b; }
