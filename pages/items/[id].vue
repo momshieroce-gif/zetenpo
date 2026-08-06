@@ -91,6 +91,7 @@ const handleInquire = async () => {
   await addDoc(messagesRef, {
     senderId: authStore.user?.uid,
     senderType: 'customer',
+    shopId: product.value.shopId,
     text: 'Hi, I would like to inquire about this product.',
     read: false,
     createdAt: serverTimestamp(),
@@ -159,7 +160,7 @@ onMounted(fetchData);
                 <span v-else>Added!</span>
               </button>
               <button class="inquire-btn" @click="handleInquire" :disabled="inquiryLoading">
-                <span v-if="!inquiryLoading">Inquire</span>
+                <span v-if="!inquiryLoading">Product Inquiry</span>
                 <span v-else>Opening chat...</span>
               </button>
             </div>

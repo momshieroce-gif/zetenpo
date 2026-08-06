@@ -2,7 +2,7 @@
   <div class="chat-page">
     <div class="chat-header">
       <NuxtLink :to="product?.id ? `/items/${product.id}` : '/dashboard'" class="back-link">← Back to item</NuxtLink>
-      <h1>Chat</h1>
+      <NuxtLink to="/dashboard/inquiries" class="chat-title">My Product Inquiries</NuxtLink>
     </div>
     <div v-if="loading" class="loading">Loading chat...</div>
     <div v-else-if="loadError" class="error-state">
@@ -38,6 +38,7 @@ import type { Chat, ChatMessage, Product, Shop } from '~/types';
 const route = useRoute();
 const chatId = route.params.chatId as string;
 const nuxtApp = useNuxtApp() as any;
+const authStore = useAuthStore();
 const chat = ref<Chat | null>(null);
 const product = ref<Product | null>(null);
 const shop = ref<Shop | null>(null);
@@ -79,7 +80,14 @@ const loadChat = async () => {
     return;
   }
 
-  chat.value = { id: chatDoc.id, ...chatDoc.data() } as Chat;
+  const fetchedChat = { id: chatDoc.id, ...chatDoc.data() } as Chat;
+  if (fetchedChat.userId !== authStore.user?.uid) {
+    loadError.value = 'You do not have permission to view this chat.';
+    loading.value = false;
+    return;
+  }
+
+  chat.value = fetchedChat;
 
   if (chat.value.productId) {
     try {
@@ -126,8 +134,27 @@ onMounted(loadChat);
 
 <style scoped>
 .chat-page { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
-.chat-header { display: flex; align-items: center; gap: 16px; margin-bottom: 32px; }
+.chat-header { display: flex; align-items: center; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; }
 .back-link { color: #4c1d95; text-decoration: none; font-weight: 700; }
+.chat-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  background: linear-gradient(90deg,#6366f1,#8b5cf6);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform .18s ease, box-shadow .18s ease, opacity .12s ease;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(99,102,241,0.12);
+}
+.chat-title:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 36px rgba(99,102,241,0.18);
+  opacity: 0.98;
+}
 .chat-meta { display: flex; gap: 24px; margin-bottom: 24px; color: #4b5563; }
 .messages { display: flex; flex-direction: column; gap: 16px; }
 .message { display: flex; }
