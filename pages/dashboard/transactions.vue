@@ -39,12 +39,23 @@
               <td>{{ formatTotal(tx) }}</td>
               <td>{{ tx.payment_method || '-' }}</td>
               <td>
-                <span class="badge" :class="statusClass(tx.status)">
+                <template v-if="canManageStatuses">
+                  <select class="status-select" :value="tx.status || 'pending'" @change="handleStatusChange($event, tx)">
+                    <option v-for="status in statusList" :key="status.slug" :value="status.slug">
+                      {{ status.name || displayStatus(status.slug) }}
+                    </option>
+                  </select>
+                </template>
+                <span v-else class="badge" :class="statusClass(tx.status)">
                   <span class="dot"></span>
                   {{ displayStatus(tx.status) }}
                 </span>
               </td>
               <td class="actions">
+                <button class="btn-action feedback" title="Feedback">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
+                  <span>Feedback</span>
+                </button>
                 <button class="btn-icon view" title="View" @click="viewTransaction(tx)">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>
@@ -88,12 +99,19 @@
             </div>
             <div class="detail-item">
               <span class="detail-label">Status</span>
-              <span class="detail-value">
-                <span class="badge" :class="statusClass(selectedTransaction.status)">
+              <div class="detail-value">
+                <template v-if="canManageStatuses">
+                  <select class="status-select" :value="selectedTransaction.status || 'pending'" @change="handleStatusChange($event, selectedTransaction)">
+                    <option v-for="status in statusList" :key="status.slug" :value="status.slug">
+                      {{ status.name || displayStatus(status.slug) }}
+                    </option>
+                  </select>
+                </template>
+                <span v-else class="badge" :class="statusClass(selectedTransaction.status)">
                   <span class="dot"></span>
                   {{ displayStatus(selectedTransaction.status) }}
                 </span>
-              </span>
+              </div>
             </div>
             <div class="detail-item">
               <span class="detail-label">Payment Method</span>
@@ -290,6 +308,10 @@ const humanize = (str: string) => str.replace(/-/g, ' ').replace(/\b\w/g, c => c
 
 const statusList = ref<any[]>([]);
 const statusMap = computed(() => Object.fromEntries(statusList.value.map((s: any) => [s.slug, s])));
+const canManageStatuses = computed(() => {
+  const roleId = authStore.user?.roleId || '';
+  return ['super-admin', 'store-admin', 'store-staff'].includes(roleId);
+});
 
 const displayStatus = (status?: string) => {
   if (!status) return 'Pending';
@@ -301,6 +323,25 @@ const isCancellable = (tx: Transaction) => {
   const created = toDate(tx.createdAt);
   if (!created) return false;
   return Date.now() - created.getTime() < 30 * 60 * 1000;
+};
+
+const updateTransactionStatus = async (tx: Transaction | null, status: string) => {
+  if (!tx?.id || !status || !canManageStatuses.value) return;
+  const previousStatus = tx.status;
+  try {
+    if (!db) throw new Error('Firebase is not available.');
+    tx.status = status;
+    await updateDoc(doc(db, 'transactions', tx.id), { status, updatedAt: serverTimestamp() });
+  } catch (e: any) {
+    tx.status = previousStatus;
+    fetchError.value = e?.message || 'Failed to update transaction status.';
+  }
+};
+
+const handleStatusChange = (event: Event, tx: Transaction | null) => {
+  const target = event.target as HTMLSelectElement | null;
+  if (!target || !tx) return;
+  void updateTransactionStatus(tx, target.value);
 };
 
 const selectedTransaction = ref<Transaction | null>(null);
@@ -327,6 +368,24 @@ const cancelTransaction = async (tx: Transaction) => {
   }
 };
 
+const getShopMapByIds = async (shopIds: string[]) => {
+  const uniqueIds = [...new Set(shopIds.filter(Boolean))] as string[];
+  if (!uniqueIds.length) return {} as Record<string, string>;
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < uniqueIds.length; i += 30) {
+    chunks.push(uniqueIds.slice(i, i + 30));
+  }
+
+  const shopSnaps = await Promise.all(
+    chunks.map(ids => getDocs(query(collection(db, 'shops'), where(documentId(), 'in', ids))))
+  );
+
+  return Object.fromEntries(
+    shopSnaps.flatMap((snap: any) => snap.docs.map((d: any) => [d.id, d.data().name || d.id]))
+  ) as Record<string, string>;
+};
+
 const fetchTransactions = async () => {
   loading.value = true;
   fetchError.value = '';
@@ -335,42 +394,77 @@ const fetchTransactions = async () => {
     const uid = authStore.user?.uid || '';
     const roleId = authStore.user?.roleId || '';
 
-    let txQuery: any = collection(db, 'transactions');
     let shopIdFilter: string[] | null = null;
     const isCustomer = roleId === 'customer';
+    const isStoreAdmin = roleId === 'store-admin';
+
+    const statusSnap = await getDocs(collection(db, 'transaction_statuses'));
+    statusList.value = statusSnap.docs.map((d: any) => d.data());
+
+    let fetched: Transaction[] = [];
 
     if (isCustomer) {
-      txQuery = query(collection(db, 'transactions'), where('user_id', '==', uid));
-    } else if (['store-admin', 'store-staff', 'store-delivery'].includes(roleId)) {
+      const txSnap = await getDocs(query(collection(db, 'transactions'), where('user_id', '==', uid)));
+      fetched = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
+    } else if (isStoreAdmin) {
+      const ownerShopsSnap = await getDocs(query(collection(db, 'shops'), where('ownerId', '==', uid)));
+      const ownerShopIds = ownerShopsSnap.docs.map((d: any) => d.id).filter(Boolean);
+
+      const membersSnap = await getDocs(query(collection(db, 'shopMembers'), where('uid', '==', uid)));
+      const memberShopIds = membersSnap.docs.map((d: any) => d.data().shopId).filter(Boolean);
+
+      const allowedShopIds = [...new Set([...ownerShopIds, ...memberShopIds])];
+      if (allowedShopIds.length) {
+        const chunks: string[][] = [];
+        for (let i = 0; i < allowedShopIds.length; i += 30) {
+          chunks.push(allowedShopIds.slice(i, i + 30));
+        }
+        const txSnaps = await Promise.all(
+          chunks.map(ids => getDocs(query(collection(db, 'transactions'), where('store_id', 'in', ids))))
+        );
+        fetched = txSnaps.flatMap((snap: any) => snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
+        shopMap.value = await getShopMapByIds(allowedShopIds);
+      } else {
+        fetched = [];
+        shopMap.value = {};
+      }
+    } else if (roleId === 'store-staff') {
       const membersSnap = await getDocs(query(collection(db, 'shopMembers'), where('uid', '==', uid)));
       shopIdFilter = membersSnap.docs.map((d: any) => d.data().shopId).filter(Boolean);
-    }
-    // super-admin and super-delivery: no filtering
-
-    const [txSnap, statusSnap] = await Promise.all([
-      getDocs(txQuery),
-      getDocs(collection(db, 'transaction_statuses')),
-    ]);
-    statusList.value = statusSnap.docs.map((d: any) => d.data());
-    let fetched: Transaction[] = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
-    if (shopIdFilter) {
-      fetched = fetched.filter(tx => tx.store_id && shopIdFilter!.includes(tx.store_id));
+      if (shopIdFilter.length) {
+        const chunks: string[][] = [];
+        for (let i = 0; i < shopIdFilter.length; i += 30) {
+          chunks.push(shopIdFilter.slice(i, i + 30));
+        }
+        const txSnaps = await Promise.all(
+          chunks.map(ids => getDocs(query(collection(db, 'transactions'), where('store_id', 'in', ids))))
+        );
+        fetched = txSnaps.flatMap((snap: any) => snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
+      } else {
+        fetched = [];
+      }
+    } else if (roleId === 'store-delivery') {
+      const membersSnap = await getDocs(query(collection(db, 'shopMembers'), where('uid', '==', uid)));
+      shopIdFilter = membersSnap.docs.map((d: any) => d.data().shopId).filter(Boolean);
+      const txSnap = await getDocs(collection(db, 'transactions'));
+      fetched = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
+      if (shopIdFilter) {
+        fetched = fetched.filter(tx => tx.store_id && shopIdFilter!.includes(tx.store_id));
+      }
+    } else {
+      const txSnap = await getDocs(collection(db, 'transactions'));
+      fetched = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
     }
 
     if (isCustomer) {
       // Only fetch the shops referenced by the customer's own transactions
       const storeIds = [...new Set(fetched.map(tx => tx.store_id).filter(Boolean))] as string[];
-      const chunks: string[][] = [];
-      for (let i = 0; i < storeIds.length; i += 30) {
-        chunks.push(storeIds.slice(i, i + 30));
+      if (storeIds.length) {
+        shopMap.value = await getShopMapByIds(storeIds);
+      } else {
+        shopMap.value = {};
       }
-      const shopSnaps = await Promise.all(
-        chunks.map(ids => getDocs(query(collection(db, 'shops'), where(documentId(), 'in', ids))))
-      );
-      shopMap.value = Object.fromEntries(
-        shopSnaps.flatMap((s: any) => s.docs.map((d: any) => [d.id, d.data().name || d.id]))
-      );
-    } else {
+    } else if (!isStoreAdmin) {
       const shopSnap = await getDocs(collection(db, 'shops'));
       shopMap.value = Object.fromEntries(shopSnap.docs.map((d: any) => [d.id, d.data().name || d.id]));
     }
@@ -442,6 +536,8 @@ onMounted(() => {
 .btn-action.view:hover { background: #e0e7ff; }
 .btn-action.cancel { color: #ef4444; background: #fef2f2; border-color: #fecaca; }
 .btn-action.cancel:hover { background: #fee2e2; }
+.btn-action.feedback { color: #0f766e; background: #ccfbf1; border-color: #99f6e4; }
+.btn-action.feedback:hover { background: #99f6e4; }
 .modal-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; }
 .modal-card { width: 100%; max-width: 620px; max-height: 90vh; overflow-y: auto; background: #fff; border-radius: 24px; box-shadow: 0 24px 60px rgba(0,0,0,0.2); }
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #f1f5f9; }
@@ -453,6 +549,8 @@ onMounted(() => {
 .detail-item.full { grid-column: span 2; }
 .detail-label { font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
 .detail-value { font-size: 14px; font-weight: 600; color: #0f172a; }
+.status-select { width: 100%; min-width: 180px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; color: #0f172a; font-size: 14px; font-weight: 600; }
+.status-select:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.15); }
 .map-link { color: #4f46e5; text-decoration: none; }
 .map-link:hover { text-decoration: underline; }
 .section-title { font-size: 14px; font-weight: 800; color: #0f172a; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.5px; }

@@ -59,7 +59,7 @@ async function resetCollections(paths: string[]) {
 }
 
 async function seed() {
-  await resetCollections(['roles', 'users', 'shops', 'shopMembers', 'products', 'chats', 'delivery_charge', 'delivery_methods', 'payment_methods', 'transactions']);
+  await resetCollections(['roles', 'users', 'shops', 'shopMembers', 'products', 'chats', 'delivery_charge', 'delivery_methods', 'payment_methods', 'transactions', 'transaction_feedbacks']);
 
   console.log('Starting Firestore seed...');
 
@@ -486,6 +486,7 @@ async function seed() {
   // --- Transactions ---
   const TRANSACTIONS_COUNT = 10;
   const transactions = [];
+  const createdTransactionIds: string[] = [];
   for (let i = 0; i < Math.min(TRANSACTIONS_COUNT, shops.length); i++) {
     const shop = shops[i];
     const user = users[0];
@@ -528,9 +529,21 @@ async function seed() {
 
   for (const transaction of transactions) {
     const docRef = db.collection('transactions').doc();
+    createdTransactionIds.push(docRef.id);
     await docRef.set({ ...transaction, createdAt: now(), updatedAt: now() });
   }
   console.log(`Seeded ${transactions.length} transactions.`);
+
+  if (createdTransactionIds.length) {
+    await db.collection('transaction_feedbacks').doc().set({
+      transactionId: createdTransactionIds[0],
+      message: 'Great service and timely delivery.',
+      rating: 5,
+      createdAt: now(),
+      updatedAt: now(),
+    });
+    console.log('Seeded 1 transaction feedback.');
+  }
 
   console.log('Firestore seed completed successfully.');
 }
