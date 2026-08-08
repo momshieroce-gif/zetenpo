@@ -52,7 +52,11 @@
                 </span>
               </td>
               <td class="actions">
-                <button class="btn-action feedback" title="Feedback">
+                <button
+                  class="btn-action feedback"
+                  :title="(tx.status || '').toLowerCase() === 'completed' ? 'Feedback' : 'Feedback available only for completed orders'"
+                  :disabled="(tx.status || '').toLowerCase() !== 'completed'"
+                  @click="openFeedbackModal(tx)">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
                   <span>Feedback</span>
                 </button>
@@ -187,11 +191,80 @@
         </div>
       </div>
     </div>
+
+    <div v-if="showFeedbackModal" class="modal-overlay" @click.self="closeFeedbackModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Submit Feedback</h3>
+          <button class="close-btn" @click="closeFeedbackModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="detail-grid">
+            <div class="detail-item full">
+              <span class="detail-label">Transaction</span>
+              <span class="detail-value">{{ selectedTransactionForFeedback?.order_number || 'Unknown' }}</span>
+            </div>
+            <div class="detail-item full">
+              <span class="detail-label">Shop</span>
+              <span class="detail-value">{{ shopMap[selectedTransactionForFeedback?.store_id || ''] || selectedTransactionForFeedback?.store_id || '-' }}</span>
+            </div>
+            <div class="detail-item full">
+              <span class="detail-label">Product</span>
+              <div class="detail-value">
+                <template v-if="selectedTransactionForFeedback?.items?.length">
+                  <select class="status-select" v-model="feedbackProductId">
+                    <option
+                      v-for="(item, idx) in selectedTransactionForFeedback.items"
+                      :key="idx"
+                      :value="item.product_id"
+                      :disabled="feedbackedProductIds.includes(item.product_id)"
+                    >
+                      {{ (item.name || ('Item ' + (idx + 1))) + (feedbackedProductIds.includes(item.product_id) ? ' — Submitted' : '') }}
+                    </option>
+                  </select>
+                </template>
+                <div v-else>Unknown product</div>
+              </div>
+            </div>
+            <div class="detail-item full">
+              <span class="detail-label">Rating</span>
+              <div class="rating-stars">
+                <button
+                  v-for="n in 5"
+                  :key="n"
+                  type="button"
+                  class="star"
+                  :class="{ active: feedbackRating >= n }"
+                  @click="feedbackRating = n"
+                  :aria-label="`${n} Star`"
+                >
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 17.27L18.18 21L16.54 13.97L22 9.24L14.81 8.63L12 2L9.19 8.63L2 9.24L7.46 13.97L5.82 21L12 17.27Z"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="detail-item full">
+              <span class="detail-label">Message</span>
+              <textarea class="input" v-model="feedbackMessage" rows="4" placeholder="Write your feedback..."></textarea>
+            </div>
+          </div>
+
+          <div v-if="feedbackError" class="field-error">{{ feedbackError }}</div>
+          <div v-if="feedbackSuccess" class="empty-title" style="color:#15803d;">{{ feedbackSuccess }}</div>
+
+          <button class="complete-btn" type="button" :disabled="isSubmittingFeedback || allItemsFeedbacked" @click="submitFeedback">
+            <span v-if="!isSubmittingFeedback">Submit Feedback</span>
+            <span v-else>Sending...</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { collection, doc, documentId, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc, documentId, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 
 interface Transaction {
   id: string;
@@ -346,6 +419,20 @@ const handleStatusChange = (event: Event, tx: Transaction | null) => {
 
 const selectedTransaction = ref<Transaction | null>(null);
 const showViewModal = ref(false);
+const selectedTransactionForFeedback = ref<Transaction | null>(null);
+const showFeedbackModal = ref(false);
+const feedbackProductId = ref('');
+const feedbackMessage = ref('');
+const feedbackRating = ref(5);
+const feedbackError = ref('');
+const feedbackSuccess = ref('');
+const isSubmittingFeedback = ref(false);
+const feedbackedProductIds = ref<string[]>([]);
+const allItemsFeedbacked = computed(() => {
+  const items = selectedTransactionForFeedback.value?.items || [];
+  if (!items.length) return false;
+  return items.every((it: any) => feedbackedProductIds.value.includes(it.product_id));
+});
 
 const viewTransaction = (tx: Transaction) => {
   selectedTransaction.value = tx;
@@ -355,6 +442,88 @@ const viewTransaction = (tx: Transaction) => {
 const closeViewModal = () => {
   showViewModal.value = false;
   selectedTransaction.value = null;
+};
+
+const openFeedbackModal = async (tx: Transaction) => {
+  selectedTransactionForFeedback.value = tx;
+  feedbackMessage.value = '';
+  feedbackRating.value = 5;
+  feedbackError.value = '';
+  feedbackSuccess.value = '';
+  feedbackedProductIds.value = [];
+
+  if (db && tx?.id) {
+    try {
+      const q = query(collection(db, 'transaction_feedbacks'), where('transactionId', '==', tx.id));
+      const snap = await getDocs(q);
+      feedbackedProductIds.value = snap.docs.map((d: any) => d.data().productId).filter(Boolean);
+    } catch (e) {
+      // ignore fetch errors for now
+      feedbackedProductIds.value = [];
+    }
+  }
+
+  // choose first non-submitted product if available
+  const firstAvailable = tx.items?.find((it: any) => !feedbackedProductIds.value.includes(it.product_id))?.product_id;
+  feedbackProductId.value = firstAvailable || tx.items?.[0]?.product_id || '';
+  showFeedbackModal.value = true;
+};
+
+const closeFeedbackModal = () => {
+  showFeedbackModal.value = false;
+  selectedTransactionForFeedback.value = null;
+  feedbackProductId.value = '';
+  feedbackMessage.value = '';
+  feedbackRating.value = 5;
+  feedbackError.value = '';
+  feedbackSuccess.value = '';
+};
+
+const submitFeedback = async () => {
+  feedbackError.value = '';
+  feedbackSuccess.value = '';
+  const tx = selectedTransactionForFeedback.value;
+  if (!tx) {
+    feedbackError.value = 'No transaction selected.';
+    return;
+  }
+  if (!db) {
+    feedbackError.value = 'Firebase is not available.';
+    return;
+  }
+  if (!feedbackProductId.value) {
+    feedbackError.value = 'Select a product for feedback.';
+    return;
+  }
+  if (feedbackedProductIds.value.includes(feedbackProductId.value)) {
+    feedbackError.value = 'Feedback already submitted for this product.';
+    return;
+  }
+  if (!tx.store_id) {
+    feedbackError.value = 'Unable to determine store for this transaction.';
+    return;
+  }
+
+  isSubmittingFeedback.value = true;
+  try {
+    await addDoc(collection(db, 'transaction_feedbacks'), {
+      transactionId: tx.id,
+      productId: feedbackProductId.value,
+      shopId: tx.store_id,
+      message: feedbackMessage.value.trim(),
+      rating: feedbackRating.value,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    feedbackSuccess.value = 'Feedback submitted successfully.';
+    setTimeout(() => {
+      closeFeedbackModal();
+    }, 1200);
+  } catch (e: any) {
+    feedbackError.value = e?.message || 'Failed to submit feedback.';
+  } finally {
+    isSubmittingFeedback.value = false;
+  }
 };
 
 const cancelTransaction = async (tx: Transaction) => {
@@ -551,6 +720,37 @@ onMounted(() => {
 .detail-value { font-size: 14px; font-weight: 600; color: #0f172a; }
 .status-select { width: 100%; min-width: 180px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; color: #0f172a; font-size: 14px; font-weight: 600; }
 .status-select:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.15); }
+.rating-stars { display: flex; gap: 10px; align-items: center; }
+.rating-stars .star { background: transparent; border: none; padding: 4px; cursor: pointer; color: #cbd5e1; transition: color 0.2s ease; display: inline-flex; align-items: center; justify-content: center; }
+.rating-stars .star:hover,
+.rating-stars .star:focus { color: #fbbf24; outline: none; }
+.rating-stars .star.active { color: #f59e0b; }
+.rating-stars .star svg { display: block; }
+  .complete-btn {
+    width: 100%;
+    padding: 14px 18px;
+    border: none;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    box-shadow: 0 18px 40px rgba(79, 70, 229, 0.18);
+    transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  }
+  .complete-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  }
+  .complete-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.72;
+    box-shadow: none;
+    background: #c7d2fe;
+  }
 .map-link { color: #4f46e5; text-decoration: none; }
 .map-link:hover { text-decoration: underline; }
 .section-title { font-size: 14px; font-weight: 800; color: #0f172a; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.5px; }

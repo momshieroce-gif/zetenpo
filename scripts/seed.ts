@@ -59,7 +59,7 @@ async function resetCollections(paths: string[]) {
 }
 
 async function seed() {
-  await resetCollections(['roles', 'users', 'shops', 'shopMembers', 'products', 'chats', 'delivery_charge', 'delivery_methods', 'payment_methods', 'transactions', 'transaction_feedbacks']);
+  await resetCollections(['roles', 'users', 'shops', 'shopMembers', 'products', 'chats', 'delivery_charge', 'delivery_methods', 'payment_methods', 'transactions', 'transaction_feedbacks', 'transaction_statuses']);
 
   console.log('Starting Firestore seed...');
 
@@ -535,8 +535,12 @@ async function seed() {
   console.log(`Seeded ${transactions.length} transactions.`);
 
   if (createdTransactionIds.length) {
+    const firstTransaction = transactions[0];
+    const firstProductId = firstTransaction?.items?.[0]?.product_id || '';
     await db.collection('transaction_feedbacks').doc().set({
       transactionId: createdTransactionIds[0],
+      productId: firstProductId,
+      shopId: firstTransaction?.store_id || '',
       message: 'Great service and timely delivery.',
       rating: 5,
       createdAt: now(),
