@@ -58,13 +58,9 @@
                   :disabled="(tx.status || '').toLowerCase() !== 'completed'"
                   @click="openFeedbackModal(tx)">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
-                  <span>Feedback</span>
                 </button>
-                <button class="btn-icon view" title="View" @click="viewTransaction(tx)">
+                <button class="btn-action view" title="View" @click="viewTransaction(tx)">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                </button>
-                <button class="btn-icon cancel" title="Cancel" :disabled="!isCancellable(tx)" @click="cancelTransaction(tx)">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                 </button>
               </td>
             </tr>
@@ -391,12 +387,6 @@ const displayStatus = (status?: string) => {
   return statusMap.value[status]?.name || humanize(status);
 };
 
-const isCancellable = (tx: Transaction) => {
-  if (tx.status?.toLowerCase() === 'cancelled') return false;
-  const created = toDate(tx.createdAt);
-  if (!created) return false;
-  return Date.now() - created.getTime() < 30 * 60 * 1000;
-};
 
 const updateTransactionStatus = async (tx: Transaction | null, status: string) => {
   if (!tx?.id || !status || !canManageStatuses.value) return;
@@ -510,6 +500,8 @@ const submitFeedback = async () => {
       transactionId: tx.id,
       productId: feedbackProductId.value,
       shopId: tx.store_id,
+      userId: authStore.user?.uid || null,
+      userName: authStore.user?.displayName || authStore.user?.email || null,
       message: feedbackMessage.value.trim(),
       rating: feedbackRating.value,
       createdAt: serverTimestamp(),
@@ -526,16 +518,7 @@ const submitFeedback = async () => {
   }
 };
 
-const cancelTransaction = async (tx: Transaction) => {
-  if (!isCancellable(tx)) return;
-  try {
-    if (!db) throw new Error('Firebase is not available.');
-    await updateDoc(doc(db, 'transactions', tx.id), { status: 'cancelled', updatedAt: serverTimestamp() });
-    tx.status = 'cancelled';
-  } catch (e: any) {
-    fetchError.value = e?.message || 'Failed to cancel transaction.';
-  }
-};
+// Cancel functionality removed per request
 
 const getShopMapByIds = async (shopIds: string[]) => {
   const uniqueIds = [...new Set(shopIds.filter(Boolean))] as string[];

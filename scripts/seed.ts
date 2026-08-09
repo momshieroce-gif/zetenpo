@@ -59,7 +59,7 @@ async function resetCollections(paths: string[]) {
 }
 
 async function seed() {
-  await resetCollections(['roles', 'users', 'shops', 'shopMembers', 'products', 'chats', 'delivery_charge', 'delivery_methods', 'payment_methods', 'transactions', 'transaction_feedbacks', 'transaction_statuses']);
+  await resetCollections(['roles', 'users', 'subscriptionPlans', 'subscriptions', 'shops', 'shopMembers', 'products', 'chats', 'delivery_charge', 'delivery_methods', 'payment_methods', 'transactions', 'transaction_feedbacks', 'transaction_statuses', 'subscriptionPlans', 'subscriptions']);
 
   console.log('Starting Firestore seed...');
 
@@ -256,6 +256,62 @@ async function seed() {
     await db.collection('users').doc(id).set({ ...data, createdAt: now(), updatedAt: now() });
   }
   console.log(`Seeded ${users.length} users.`);
+
+  // --- Subscription Plans ---
+  const subscriptionPlans = [
+    {
+      id: 'free',
+      name: 'Free',
+      slug: 'free',
+      price: 0,
+      description: 'Starter plan for basic access.',
+      sort_order: 1,
+      is_active: true,
+    },
+    {
+      id: 'basic',
+      name: 'Basic',
+      slug: 'basic',
+      price: 95,
+      description: 'Growth plan for regular store operations.',
+      sort_order: 2,
+      is_active: true,
+    },
+    {
+      id: 'premium',
+      name: 'Premium',
+      slug: 'premium',
+      price: 495,
+      description: 'Full-featured plan for advanced usage.',
+      sort_order: 3,
+      is_active: true,
+    },
+  ];
+
+  for (const plan of subscriptionPlans) {
+    const { id, ...data } = plan;
+    await db.collection('subscriptionPlans').doc(id).set({ ...data, createdAt: now(), updatedAt: now() });
+  }
+  console.log(`Seeded ${subscriptionPlans.length} subscription plans.`);
+
+  // --- Subscriptions (seeded for customer user only) ---
+  const startedAtDate = new Date();
+  const expiresAtDate = new Date(startedAtDate);
+  expiresAtDate.setDate(expiresAtDate.getDate() + 30);
+
+  await db.collection('subscriptions').doc(customerId).set({
+    userId: customerId,
+    planId: 'premium',
+    status: 'active',
+    startedAt: admin.firestore.Timestamp.fromDate(startedAtDate),
+    expiresAt: admin.firestore.Timestamp.fromDate(expiresAtDate),
+    months: 1,
+    totalAmount: 495,
+    monthlyPrice: 495,
+    createdAt: now(),
+    updatedAt: now(),
+  });
+  console.log('Seeded 1 subscription for customer user.');
 
   // --- Shops ---
   const centerLat = 10.3621945;
@@ -541,6 +597,8 @@ async function seed() {
       transactionId: createdTransactionIds[0],
       productId: firstProductId,
       shopId: firstTransaction?.store_id || '',
+      userId: users[0].id || '',
+      userName: users[0].name || '',
       message: 'Great service and timely delivery.',
       rating: 5,
       createdAt: now(),

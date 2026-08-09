@@ -16,6 +16,16 @@ const { cart, addToCart } = useCart();
 const added = ref(false);
 const inquiryLoading = ref(false);
 
+type ProductFeedback = {
+  id: string;
+  userId?: string;
+  userName?: string;
+  message?: string;
+  rating?: number;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+};
+
 useHead({
   title: computed(() => (product.value?.name ? `${product.value.name} | My Near Shops` : 'Product | My Near Shops')),
 });
@@ -34,6 +44,7 @@ const fetchData = async () => {
         shop.value = { id: shopDoc.id, ...shopDoc.data() } as Shop;
       }
     }
+    await fetchFeedbacks();
   }
   loading.value = false;
 };
@@ -100,6 +111,75 @@ const handleInquire = async () => {
   inquiryLoading.value = false;
   router.push(`/chats/${newChatDoc.id}`);
 };
+
+const feedbacks = ref<ProductFeedback[]>([]);
+const feedbacksLoading = ref(false);
+const fetchFeedbacks = async () => {
+  if (!process.client || !nuxtApp.$firebase?.db) return;
+  feedbacksLoading.value = true;
+  try {
+    const db = nuxtApp.$firebase.db;
+    const q = query(collection(db, 'transaction_feedbacks'), where('productId', '==', productId));
+    const snap = await getDocs(q);
+    feedbacks.value = snap.docs
+      .map((d: any) => ({ id: d.id, ...d.data() }) as ProductFeedback)
+      .sort((left, right) => {
+        const leftTime = toDate(left.createdAt)?.getTime() || 0;
+        const rightTime = toDate(right.createdAt)?.getTime() || 0;
+        return rightTime - leftTime;
+      });
+  } catch (e) {
+    feedbacks.value = [];
+  } finally {
+    feedbacksLoading.value = false;
+  }
+};
+
+const toDate = (value: any): Date | null => {
+  if (!value) return null;
+  if (value.toDate) return value.toDate();
+  if (value instanceof Date) return value;
+  if (typeof value === 'number') return new Date(value);
+  return new Date(value);
+};
+
+const formatDate = (value: any) => {
+  const d = toDate(value);
+  if (!d) return '';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const normalizedRating = (value: number | undefined) => {
+  if (!value) return 0;
+  return Math.max(0, Math.min(5, Math.round(value)));
+};
+
+const averageRating = computed(() => {
+  if (!feedbacks.value.length) return 0;
+  const total = feedbacks.value.reduce((sum: number, feedback: ProductFeedback) => sum + normalizedRating(feedback.rating), 0);
+  return total / feedbacks.value.length;
+});
+
+const ratingBreakdown = computed(() => {
+  const counts = [5, 4, 3, 2, 1].map((rating) => {
+    const count = feedbacks.value.filter((feedback: ProductFeedback) => normalizedRating(feedback.rating) === rating).length;
+    const percent = feedbacks.value.length ? (count / feedbacks.value.length) * 100 : 0;
+    return { rating, count, percent };
+  });
+
+  return counts;
+});
+
+const reviewerInitials = (feedback: ProductFeedback) => {
+  const label = feedback.userName || feedback.userId || 'Anonymous';
+  const parts = label.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'AN';
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() || '').join('');
+};
+
+const reviewerName = (feedback: ProductFeedback) => feedback.userName || feedback.userId || 'Anonymous';
+
+const starFillWidth = (rating: number) => `${(Math.max(0, Math.min(5, rating)) / 5) * 100}%`;
 
 onMounted(fetchData);
 </script>
@@ -169,7 +249,72 @@ onMounted(fetchData);
       </div>
     </div>
 
-    <div v-if="showMultiShopModal" class="modal-overlay" @click.self="showMultiShopModal = false">
+      <div class="product-reviews container" v-if="!loading && product">
+        <div class="reviews-shell">
+          <div class="reviews-heading">
+            <div>
+              <p class="section-eyebrow">Customer feedback</p>
+              <h3 class="section-title">Reviews</h3>
+            </div>
+            <div v-if="feedbacks.length" class="reviews-count">{{ feedbacks.length }} review{{ feedbacks.length > 1 ? 's' : '' }}</div>
+          </div>
+
+          <div v-if="feedbacksLoading" class="loading reviews-loading">Loading reviews...</div>
+
+          <template v-else-if="feedbacks.length">
+            <div class="reviews-summary">
+              <div class="summary-score-card">
+                <div class="summary-score">{{ averageRating.toFixed(1) }}</div>
+                <div class="summary-stars" :aria-label="`Average rating ${averageRating.toFixed(1)} out of 5`">
+                  <div class="stars-base">★★★★★</div>
+                  <div class="stars-fill" :style="{ width: starFillWidth(averageRating) }">★★★★★</div>
+                </div>
+                <p class="summary-caption">Based on verified customer feedback</p>
+              </div>
+
+              <div class="ratings-breakdown" aria-label="Rating distribution">
+                <div v-for="item in ratingBreakdown" :key="item.rating" class="breakdown-row">
+                  <span class="breakdown-label">{{ item.rating }}★</span>
+                  <div class="breakdown-track">
+                    <div class="breakdown-bar" :style="{ width: `${item.percent}%` }"></div>
+                  </div>
+                  <span class="breakdown-value">{{ item.count }}</span>
+                </div>
+              </div>
+            </div>
+
+            <ul class="reviews-list">
+              <li v-for="fb in feedbacks" :key="fb.id" class="review-item">
+                <div class="review-avatar">{{ reviewerInitials(fb) }}</div>
+                <div class="review-content">
+                  <div class="review-header">
+                    <div>
+                      <strong class="reviewer-name">{{ reviewerName(fb) }}</strong>
+                      <div v-if="fb.createdAt" class="review-date">{{ formatDate(fb.createdAt) }}</div>
+                    </div>
+                    <div class="review-rating-wrap">
+                      <div class="review-stars" :aria-label="`Rated ${normalizedRating(fb.rating)} out of 5`">
+                        <div class="stars-base">★★★★★</div>
+                        <div class="stars-fill" :style="{ width: starFillWidth(normalizedRating(fb.rating)) }">★★★★★</div>
+                      </div>
+                      <span class="rating-pill">{{ normalizedRating(fb.rating) }}.0</span>
+                    </div>
+                  </div>
+                  <div class="review-message">{{ fb.message || 'No written feedback provided.' }}</div>
+                </div>
+              </li>
+            </ul>
+          </template>
+
+          <div v-else class="reviews-empty">
+            <div class="empty-icon review-empty-icon">★</div>
+            <div class="empty-title">No reviews yet</div>
+            <p class="empty-copy">This product has not received customer feedback yet.</p>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="showMultiShopModal" class="modal-overlay" @click.self="showMultiShopModal = false">
       <div class="modal-card">
         <div class="modal-header">
           <h3>Multiple shops detected</h3>
@@ -491,4 +636,270 @@ onMounted(fetchData);
 .modal-btn-primary:hover { background: #d97706; }
 .modal-btn-ghost { background: transparent; color: #64748b; }
 .modal-btn-ghost:hover { background: #f1f5f9; }
+
+.product-reviews { max-width: 1200px; margin: 20px auto 0; padding: 0 24px 40px; }
+.reviews-shell {
+  background: linear-gradient(180deg, #ffffff 0%, #faf7ff 100%);
+  border: 1px solid rgba(124, 58, 237, 0.08);
+  border-radius: 28px;
+  box-shadow: 0 18px 50px rgba(76, 29, 149, 0.08);
+  padding: 28px;
+}
+
+.reviews-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.section-eyebrow {
+  margin: 0 0 6px;
+  color: #7c3aed;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.section-title {
+  margin: 0;
+  color: #111827;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.reviews-count {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: #f3e8ff;
+  color: #6d28d9;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.reviews-loading {
+  padding: 40px 0;
+}
+
+.reviews-summary {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.summary-score-card {
+  background: radial-gradient(circle at top, rgba(251, 191, 36, 0.22), transparent 55%), #1f1147;
+  color: #fff;
+  border-radius: 22px;
+  padding: 24px;
+}
+
+.summary-score {
+  font-size: 56px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.summary-stars,
+.review-stars {
+  position: relative;
+  display: inline-block;
+  letter-spacing: 0.22em;
+  line-height: 1;
+}
+
+.summary-stars {
+  margin: 12px 0 10px;
+  font-size: 20px;
+}
+
+.review-stars {
+  font-size: 14px;
+}
+
+.stars-base {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.review-stars .stars-base {
+  color: #ddd6fe;
+}
+
+.stars-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  overflow: hidden;
+  color: #fbbf24;
+  white-space: nowrap;
+}
+
+.summary-caption {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 13px;
+}
+
+.ratings-breakdown {
+  display: grid;
+  gap: 12px;
+  align-content: center;
+}
+
+.breakdown-row {
+  display: grid;
+  grid-template-columns: 42px 1fr 28px;
+  align-items: center;
+  gap: 12px;
+}
+
+.breakdown-label,
+.breakdown-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #4b5563;
+}
+
+.breakdown-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #ede9fe;
+  overflow: hidden;
+}
+
+.breakdown-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #8b5cf6 0%, #f59e0b 100%);
+}
+
+.reviews-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+}
+
+.review-item {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 16px;
+  background: #fff;
+  border: 1px solid rgba(124, 58, 237, 0.08);
+  border-radius: 20px;
+  padding: 18px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.review-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #7c3aed 0%, #f59e0b 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.review-content {
+  min-width: 0;
+}
+
+.review-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.reviewer-name {
+  display: block;
+  color: #111827;
+  font-size: 16px;
+}
+
+.review-date {
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.review-rating-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.rating-pill {
+  min-width: 48px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #f3e8ff;
+  color: #6d28d9;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.review-message {
+  color: #374151;
+  line-height: 1.7;
+}
+
+.reviews-empty {
+  padding: 20px 0 8px;
+  text-align: center;
+}
+
+.review-empty-icon {
+  background: linear-gradient(135deg, #fef3c7 0%, #ede9fe 100%);
+  color: #7c3aed;
+}
+
+.empty-copy {
+  margin: 0;
+  color: #6b7280;
+}
+
+@media (max-width: 900px) {
+  .reviews-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .reviews-shell {
+    padding: 22px 18px;
+  }
+
+  .reviews-heading,
+  .review-header {
+    flex-direction: column;
+  }
+
+  .review-item {
+    grid-template-columns: 1fr;
+  }
+
+  .review-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+  }
+
+  .review-rating-wrap {
+    justify-content: space-between;
+    width: 100%;
+  }
+}
 </style>

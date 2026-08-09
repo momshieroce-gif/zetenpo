@@ -56,6 +56,11 @@
           <span>Product Inquiries</span>
         </NuxtLink>
 
+        <NuxtLink to="/dashboard/subscriptions" class="menu-item">
+          <span class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.35 4.76 5.25.76-3.8 3.7.9 5.23L12 13.98l-4.7 2.47.9-5.23-3.8-3.7 5.25-.76L12 2Zm0 13.73 2.68 1.41-.51-2.98 2.16-2.1-2.99-.43L12 8.91l-1.34 2.72-2.99.43 2.16 2.1-.51 2.98L12 15.73Z" fill="currentColor"/></svg></span>
+          <span>Subscriptions</span>
+        </NuxtLink>
+
         <NuxtLink to="/dashboard/profile" class="menu-item">
           <span class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="currentColor"/></svg></span>
           <span>Profile</span>
