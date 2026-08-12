@@ -10,9 +10,29 @@
           <span>My Near Shops</span>
         </div>
         <div class="header-actions">
-          <button class="header-icon-btn" aria-label="Profile" @click="navigateTo('/dashboard/profile')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" fill="currentColor"/></svg>
-          </button>
+          <div ref="userLogsMenuRef" class="header-dropdown-wrap">
+            <button class="header-icon-btn" aria-label="User Logs" @click="toggleUserLogsDropdown">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M13 3a9 9 0 1 0 8.95 10h-2.02A7 7 0 1 1 13 5v4l6-5-6-5v4zm-1 6h2v6h-2V9zm0 8h2v2h-2v-2z" fill="currentColor"/></svg>
+            </button>
+            <div v-if="showUserLogsDropdown" class="header-dropdown-card">
+              <div class="header-dropdown-title-row">
+                <div class="header-dropdown-title">User Logs</div>
+                <button class="header-dropdown-link" @click="navigateTo('/dashboard/profile'); showUserLogsDropdown = false">Profile</button>
+              </div>
+              <div v-if="loadingUserLogs" class="header-dropdown-state">Loading latest logs...</div>
+              <div v-else-if="userLogsError" class="header-dropdown-state error">{{ userLogsError }}</div>
+              <div v-else-if="!latestUserLogs.length" class="header-dropdown-state">No logs yet.</div>
+              <ul v-else class="header-dropdown-list">
+                <li v-for="log in latestUserLogs" :key="log.id" class="header-dropdown-item" @click="openLogRoute(log.routePath)">
+                  <div class="header-dropdown-item-top">
+                    <span class="operation-chip" :class="`op-${log.operation}`">{{ log.operation }}</span>
+                  </div>
+                  <div class="header-dropdown-route">{{ log.routePath || '/' }}</div>
+                  <div class="header-dropdown-time">{{ formatLogTime(log.createdAt) }}</div>
+                </li>
+              </ul>
+            </div>
+          </div>
           <button class="header-icon-btn" aria-label="Logout" @click="handleLogout">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" fill="currentColor"/></svg>
           </button>
@@ -56,7 +76,7 @@
           <span>Product Inquiries</span>
         </NuxtLink>
 
-        <NuxtLink to="/dashboard/subscriptions" class="menu-item">
+        <NuxtLink v-if="canViewSubscriptions" to="/dashboard/subscriptions" class="menu-item">
           <span class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.35 4.76 5.25.76-3.8 3.7.9 5.23L12 13.98l-4.7 2.47.9-5.23-3.8-3.7 5.25-.76L12 2Zm0 13.73 2.68 1.41-.51-2.98 2.16-2.1-2.99-.43L12 8.91l-1.34 2.72-2.99.43 2.16 2.1-.51 2.98L12 15.73Z" fill="currentColor"/></svg></span>
           <span>Subscriptions</span>
         </NuxtLink>
@@ -103,6 +123,7 @@
 
 <script setup lang="ts">
 import { signOut } from 'firebase/auth';
+import { collection, getDocs, limit, logUserAuthActivity, orderBy, query } from '~/utils/firestoreLogger';
 
 const authStore = useAuthStore();
 const { $firebase } = useNuxtApp() as any;
@@ -110,6 +131,16 @@ const authCookie = useCookie<string | null>('auth_user');
 
 const leftDrawerOpen = ref(false);
 const showLogoutDialog = ref(false);
+const showUserLogsDropdown = ref(false);
+const loadingUserLogs = ref(false);
+const userLogsError = ref('');
+const userLogsMenuRef = ref<HTMLElement | null>(null);
+const latestUserLogs = ref<Array<{
+  id: string;
+  operation: string;
+  routePath: string | null;
+  createdAt: any;
+}>>([]);
 
 const initials = computed(() => {
   const name = authStore.displayName || 'U';
@@ -119,16 +150,82 @@ const initials = computed(() => {
 const userRole = computed(() => authStore.user?.role || 'Member');
 const canViewUsers = computed(() => ['super-admin','store-admin'].includes(authStore.user?.roleId || ''));
 const canViewShops = computed(() => ['super-admin','store-admin', 'store-staff'].includes(authStore.user?.roleId || ''));
+const canViewSubscriptions = computed(() => {
+  const roleId = String(authStore.user?.roleId || '').toLowerCase().replace(/[_\s]+/g, '-');
+  const role = String(authStore.user?.role || '').toLowerCase().replace(/[_\s]+/g, '-');
+  return roleId === 'store-admin' || role === 'store-admin';
+});
 
 const handleLogout = () => {
   showLogoutDialog.value = true;
   leftDrawerOpen.value = false;
+  showUserLogsDropdown.value = false;
+};
+
+const fetchLatestUserLogs = async () => {
+  loadingUserLogs.value = true;
+  userLogsError.value = '';
+  try {
+    const db = $firebase?.db;
+    if (!db) throw new Error('Database is not available.');
+
+    const logsQuery = query(
+      collection(db, 'userLogs'),
+      orderBy('createdAt', 'desc'),
+      limit(10)
+    );
+    const snapshot = await getDocs(logsQuery);
+    latestUserLogs.value = snapshot.docs.map((entry: any) => {
+      const data = entry.data() as any;
+      return {
+        id: entry.id,
+        operation: String(data.operation || 'unknown'),
+        routePath: data.routePath || null,
+        createdAt: data.createdAt || null,
+      };
+    });
+  } catch (e: any) {
+    userLogsError.value = e?.message || 'Unable to load logs.';
+  } finally {
+    loadingUserLogs.value = false;
+  }
+};
+
+const toggleUserLogsDropdown = async () => {
+  showUserLogsDropdown.value = !showUserLogsDropdown.value;
+  if (showUserLogsDropdown.value) {
+    await fetchLatestUserLogs();
+  }
+};
+
+const openLogRoute = async (routePath: string | null) => {
+  const target = typeof routePath === 'string' && routePath.startsWith('/') ? routePath : '/';
+  showUserLogsDropdown.value = false;
+  await navigateTo(target);
+};
+
+const formatLogTime = (createdAt: any) => {
+  let dateValue: Date | null = null;
+  if (createdAt?.toDate && typeof createdAt.toDate === 'function') {
+    dateValue = createdAt.toDate();
+  }
+  if (!dateValue) return 'No timestamp';
+  return dateValue.toLocaleString();
+};
+
+const onDocumentClick = (event: MouseEvent) => {
+  if (!showUserLogsDropdown.value) return;
+  if (userLogsMenuRef.value && !userLogsMenuRef.value.contains(event.target as Node)) {
+    showUserLogsDropdown.value = false;
+  }
 };
 
 const logout = async () => {
   try {
     await signOut($firebase.auth);
-  } catch (e) {
+    await logUserAuthActivity('logout', 'success', { source: 'dashboard-layout' });
+  } catch (e: any) {
+    await logUserAuthActivity('logout', 'error', { source: 'dashboard-layout', message: e?.message || 'Logout failed.' });
     // ignore
   }
   authStore.logout();
@@ -141,6 +238,14 @@ const logout = async () => {
 const confirmLogout = async () => {
   await logout();
 };
+
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', onDocumentClick);
+});
 </script>
 
 <style scoped>
@@ -154,6 +259,26 @@ const confirmLogout = async () => {
 .header-actions { display: flex; align-items: center; gap: 10px; }
 .header-icon-btn { width: 40px; height: 40px; border-radius: 10px; background: rgba(255,255,255,0.1); border: none; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s; }
 .header-icon-btn:hover { background: rgba(255,255,255,0.2); }
+.header-dropdown-wrap { position: relative; }
+.header-dropdown-card { position: absolute; top: calc(100% + 10px); right: 0; width: 360px; max-height: 420px; overflow-y: auto; border-radius: 14px; background: #0f172a; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 18px 42px rgba(0,0,0,0.35); padding: 12px; z-index: 80; }
+.header-dropdown-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.header-dropdown-title { color: #f8fafc; font-size: 14px; font-weight: 800; }
+.header-dropdown-link { border: none; background: transparent; color: #818cf8; font-size: 12px; font-weight: 700; cursor: pointer; }
+.header-dropdown-state { color: #cbd5e1; font-size: 12px; padding: 8px 4px; }
+.header-dropdown-state.error { color: #fca5a5; }
+.header-dropdown-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.header-dropdown-item { border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); padding: 10px; }
+.header-dropdown-item { cursor: pointer; transition: background 0.2s, border-color 0.2s; }
+.header-dropdown-item:hover { background: rgba(255,255,255,0.1); border-color: rgba(129,140,248,0.45); }
+.header-dropdown-item-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.operation-chip { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 999px; padding: 2px 8px; }
+.operation-chip.op-read { background: rgba(59,130,246,0.2); color: #93c5fd; }
+.operation-chip.op-write { background: rgba(34,197,94,0.2); color: #86efac; }
+.operation-chip.op-delete { background: rgba(239,68,68,0.2); color: #fca5a5; }
+.operation-chip.op-login { background: rgba(245,158,11,0.2); color: #fcd34d; }
+.operation-chip.op-logout { background: rgba(168,85,247,0.2); color: #d8b4fe; }
+.header-dropdown-route { color: #e2e8f0; font-size: 12px; font-weight: 600; margin-bottom: 4px; word-break: break-word; }
+.header-dropdown-time { color: #94a3b8; font-size: 11px; }
 
 .sidebar { position: fixed; top: 64px; left: 0; bottom: 0; width: 280px; background: #0f172a; color: #fff; display: flex; flex-direction: column; overflow-y: auto; z-index: 40; box-shadow: 4px 0 24px rgba(0,0,0,0.2); border-right: 1px solid rgba(255, 255, 255, 0.08); }
 .sidebar-brand { display: flex; align-items: center; gap: 14px; padding: 24px; border-bottom: 1px solid rgba(255,255,255,0.1); }
@@ -197,5 +322,6 @@ const confirmLogout = async () => {
   .sidebar.open { transform: translateX(0); }
   .dashboard-header { z-index: 60; }
   .dashboard-main { margin-left: 0; padding: 88px 20px 24px; }
+  .header-dropdown-card { width: min(360px, calc(100vw - 24px)); }
 }
 </style>

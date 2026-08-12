@@ -150,7 +150,7 @@
 </template>
 
 <script setup lang="ts">
-import { collection, query, where, getDocs, orderBy, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, documentId } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, documentId } from '~/utils/firestoreLogger';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
 
 definePageMeta({ layout: 'dashboard', middleware: 'auth', ssr: false });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where } from '~/utils/firestoreLogger';
 import type { Product, Shop } from '~/types';
 
 const route = useRoute();

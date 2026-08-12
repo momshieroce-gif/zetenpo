@@ -76,7 +76,8 @@
 
 <script setup lang="ts">
 import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup, signOut } from 'firebase/auth';
-import { collection, doc, getDoc, query, where, getDocs, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, query, where, getDocs, setDoc, serverTimestamp } from '~/utils/firestoreLogger';
+import { logUserAuthActivity } from '~/utils/firestoreLogger';
 
 definePageMeta({ ssr: false });
 useHead({ title: 'Login | My Near Shops' });
@@ -123,9 +124,11 @@ const signIn = async () => {
     };
     authStore.setUser(profile as any);
     document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(profile))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+    await logUserAuthActivity('login', 'success', { method: 'email-password' });
     const redirectPath = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard';
     await router.push(redirectPath);
   } catch (e: any) {
+    await logUserAuthActivity('login', 'error', { method: 'email-password', message: e?.message || 'Sign in failed.' });
     error.value = e?.message || 'Sign in failed. Please try again.';
   } finally {
     loading.value = false;
@@ -169,9 +172,11 @@ const signInWithGoogle = async () => {
     };
     authStore.setUser(profile as any);
     document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(profile))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+    await logUserAuthActivity('login', 'success', { method: 'google' });
     const redirectPath = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard';
     await router.push(redirectPath);
   } catch (e: any) {
+    await logUserAuthActivity('login', 'error', { method: 'google', message: e?.message || 'Google sign in failed.' });
     error.value = e?.message || 'Google sign in failed.';
   } finally {
     loading.value = false;

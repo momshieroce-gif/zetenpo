@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { collection, doc, getDoc, getDocs, addDoc, updateDoc, query, where, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, addDoc, updateDoc, query, where, serverTimestamp } from '~/utils/firestoreLogger';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { Shop, Product } from '~/types';
 

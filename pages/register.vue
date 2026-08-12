@@ -86,7 +86,8 @@
 
 <script setup lang="ts">
 import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signOut } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from '~/utils/firestoreLogger';
+import { logUserAuthActivity } from '~/utils/firestoreLogger';
 
 definePageMeta({ ssr: false });
 useHead({ title: 'Register | My Near Shops' });
@@ -141,8 +142,10 @@ const register = async () => {
 
     await sendEmailVerification(cred.user);
     await signOut($firebase.auth);
+    await logUserAuthActivity('logout', 'success', { source: 'register-page', reason: 'post-registration-email-verification' });
     emailSent.value = true;
   } catch (e: any) {
+    await logUserAuthActivity('login', 'error', { method: 'register', message: e?.message || 'Registration failed.' });
     if (e?.code === 'auth/email-already-in-use') {
       error.value = 'This email is already registered. Try signing in instead.';
     } else if (e?.code === 'auth/weak-password') {

@@ -260,7 +260,7 @@
 </template>
 
 <script setup lang="ts">
-import { addDoc, collection, doc, documentId, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc, documentId, getDocs, query, serverTimestamp, updateDoc, where } from '~/utils/firestoreLogger';
 
 interface Transaction {
   id: string;

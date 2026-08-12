@@ -32,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { collection, doc, getDoc, getDocs, onSnapshot, query, where, orderBy } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, onSnapshot, query, where, orderBy } from '~/utils/firestoreLogger';
 import type { Chat, ChatMessage, Product, Shop } from '~/types';
 
 const route = useRoute();

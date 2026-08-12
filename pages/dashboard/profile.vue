@@ -73,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, updateDoc } from '~/utils/firestoreLogger';
 
 interface Profile {
   id: string;

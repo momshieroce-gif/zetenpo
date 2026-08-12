@@ -262,7 +262,7 @@
 </template>
 
 <script setup lang="ts">
-import { collection, addDoc, doc, documentId, getDocs, getDoc, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, documentId, getDocs, getDoc, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from '~/utils/firestoreLogger';
 import type { Shop, Product } from '~/types';
 
 definePageMeta({

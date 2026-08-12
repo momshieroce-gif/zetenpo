@@ -112,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-import { collection, doc, documentId, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, documentId, getDocs, query, serverTimestamp, updateDoc, where } from '~/utils/firestoreLogger';
 
 interface User {
   id: string;

@@ -81,7 +81,7 @@
 
 <script setup lang="ts">
 import { GoogleMap, AdvancedMarker, InfoWindow } from 'vue3-google-map';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs } from '~/utils/firestoreLogger';
 import type { Shop } from '~/types';
 
 useHead({

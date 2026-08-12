@@ -148,7 +148,37 @@
           <img :src="gcashImage" alt="GCash QR" class="payment-qr-image" />
           <p class="payment-caption">Scan to pay.</p>
           <p class="payment-total">Amount: {{ formatMoney(totalAmount) }}</p>
-          <button class="confirm-payment-btn" :disabled="isSubmitting" @click="confirmPaymentAndCreateSubscription">
+          <div class="proof-grid">
+            <label class="field">
+              <span class="field-label">Reference No.</span>
+              <input
+                v-model="referenceNo"
+                type="text"
+                class="field-input"
+                placeholder="Enter payment reference number"
+              />
+            </label>
+
+            <label class="field">
+              <span class="field-label">Upload screenshot</span>
+              <input
+                type="file"
+                class="field-input"
+                accept="image/*"
+                @change="onPaymentScreenshotChange"
+              />
+            </label>
+          </div>
+
+          <p v-if="paymentScreenshotFile" class="payment-proof-file">Selected file: {{ paymentScreenshotFile.name }}</p>
+          <p class="payment-proof-note">Add either Reference No. or screenshot to proceed.</p>
+          <p v-if="proofValidationError" class="action-error">{{ proofValidationError }}</p>
+
+          <button
+            class="confirm-payment-btn"
+            :disabled="isSubmitting || !hasPaymentProof || !hasRemainingWeeklySubmissions"
+            @click="confirmPaymentAndCreateSubscription"
+          >
             <span v-if="!isSubmitting">Confirm Payment</span>
             <span v-else>Saving...</span>
           </button>
@@ -159,7 +189,8 @@
 </template>
 
 <script setup lang="ts">
-import { Timestamp, addDoc, collection, getDocs, query, serverTimestamp, where } from 'firebase/firestore';
+import { Timestamp, addDoc, collection, getDocs, query, serverTimestamp, where } from '~/utils/firestoreLogger';
+import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import gcashImage from '~/assets/images/gCash.jpg';
 
 definePageMeta({
@@ -181,6 +212,11 @@ type SubscriptionRecord = {
   expiresAt?: unknown;
   createdAt?: unknown;
   updatedAt?: unknown;
+  clientCreatedAt?: number;
+  referenceNo?: string | null;
+  screenshotUrl?: string | null;
+  screenshotPath?: string | null;
+  screenshotName?: string | null;
 };
 
 type SubscriptionPlan = {
@@ -253,6 +289,19 @@ const isSubmitting = ref(false);
 const actionError = ref('');
 const actionMessage = ref('');
 const showPaymentModal = ref(false);
+const referenceNo = ref('');
+const paymentScreenshotFile = ref<File | null>(null);
+const proofValidationError = ref('');
+const submissionLimitError = ref('');
+const weeklySubmissionCount = ref(0);
+
+const MAX_WEEKLY_SUBMISSIONS = 3;
+
+const isStoreAdmin = computed(() => {
+  const roleId = String(authStore.user?.roleId || '').toLowerCase().replace(/[_\s]+/g, '-');
+  const role = String(authStore.user?.role || '').toLowerCase().replace(/[_\s]+/g, '-');
+  return roleId === 'store-admin' || role === 'store-admin';
+});
 
 const todayAtMidnight = () => {
   const date = new Date();
@@ -318,6 +367,20 @@ const totalAmount = computed(() => {
 
 const canSubmit = computed(() => {
   return Boolean(selectedPlan.value) && selectedPlan.value.id !== 'free' && billingMonths.value > 0;
+});
+
+const hasPaymentProof = computed(() => {
+  return Boolean(referenceNo.value.trim()) || Boolean(paymentScreenshotFile.value);
+});
+
+const remainingWeeklySubmissions = computed(() => {
+  return Math.max(0, MAX_WEEKLY_SUBMISSIONS - weeklySubmissionCount.value);
+});
+
+const hasRemainingWeeklySubmissions = computed(() => remainingWeeklySubmissions.value > 0);
+
+const submissionLimitNote = computed(() => {
+  return `Maximum ${MAX_WEEKLY_SUBMISSIONS} submissions per week. Remaining this week: ${remainingWeeklySubmissions.value}.`;
 });
 
 const subscriptionStatusTone = computed(() => {
@@ -395,20 +458,58 @@ const fetchSubscription = async () => {
   const latest = snapshot.docs
     .map((d) => ({ id: d.id, ...(d.data() as Omit<SubscriptionRecord, 'id'>) }))
     .sort((a, b) => {
-      const aTime = toDate(a.createdAt)?.getTime() || 0;
-      const bTime = toDate(b.createdAt)?.getTime() || 0;
+      const aTime =
+        toDate(a.updatedAt)?.getTime() ||
+        toDate(a.createdAt)?.getTime() ||
+        Number(a.clientCreatedAt || 0);
+      const bTime =
+        toDate(b.updatedAt)?.getTime() ||
+        toDate(b.createdAt)?.getTime() ||
+        Number(b.clientCreatedAt || 0);
       return bTime - aTime;
     })[0];
 
   currentSubscription.value = latest as SubscriptionRecord;
 };
 
+const getWeekStart = () => {
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(now.getDate() - now.getDay());
+  return start;
+};
+
+const refreshWeeklySubmissionCount = async () => {
+  if (!nuxtApp.$firebase?.db || !authStore.user?.uid) {
+    weeklySubmissionCount.value = 0;
+    return;
+  }
+
+  const db = nuxtApp.$firebase.db;
+  const startOfWeek = getWeekStart();
+  const weeklyQuery = query(
+    collection(db, 'subscriptions'),
+    where('userId', '==', authStore.user.uid),
+    where('createdAt', '>=', Timestamp.fromDate(startOfWeek))
+  );
+  const snapshot = await getDocs(weeklyQuery);
+  weeklySubmissionCount.value = snapshot.size;
+};
+
 const fetchPageData = async () => {
   loading.value = true;
   fetchError.value = '';
 
+  if (!isStoreAdmin.value) {
+    loading.value = false;
+    fetchError.value = 'Subscriptions are only available for Store Admin accounts.';
+    await navigateTo('/dashboard');
+    return;
+  }
+
   try {
-    await Promise.all([fetchSubscriptionPlans(), fetchSubscription()]);
+    await Promise.all([fetchSubscriptionPlans(), fetchSubscription(), refreshWeeklySubmissionCount()]);
 
     if (currentSubscription.value?.planId) {
       selectedPlanId.value = currentSubscription.value.planId;
@@ -432,6 +533,11 @@ const fetchPageData = async () => {
 
 const getUpgradePayload = () => {
   actionError.value = '';
+
+  if (!isStoreAdmin.value) {
+    actionError.value = 'Only Store Admin accounts can manage subscriptions.';
+    return null;
+  }
 
   if (!nuxtApp.$firebase?.db || !authStore.user?.uid) {
     actionError.value = 'You must be logged in to update a subscription.';
@@ -465,48 +571,131 @@ const getUpgradePayload = () => {
 
 const closePaymentModal = () => {
   showPaymentModal.value = false;
+  proofValidationError.value = '';
+  submissionLimitError.value = '';
 };
 
-const startUpgradePayment = () => {
+const onPaymentScreenshotChange = (event: Event) => {
+  proofValidationError.value = '';
+
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0] || null;
+
+  if (!file) {
+    paymentScreenshotFile.value = null;
+    return;
+  }
+
+  if (!file.type.startsWith('image/')) {
+    proofValidationError.value = 'Please upload an image file for the screenshot.';
+    paymentScreenshotFile.value = null;
+    target.value = '';
+    return;
+  }
+
+  paymentScreenshotFile.value = file;
+  target.value = '';
+};
+
+const startUpgradePayment = async () => {
   actionMessage.value = '';
+  proofValidationError.value = '';
+  submissionLimitError.value = '';
   const payload = getUpgradePayload();
   if (!payload) return;
+
+  await refreshWeeklySubmissionCount();
+  if (!hasRemainingWeeklySubmissions.value) {
+    submissionLimitError.value = `You already reached ${MAX_WEEKLY_SUBMISSIONS} submissions this week.`;
+    return;
+  }
+
   showPaymentModal.value = true;
 };
 
 const confirmPaymentAndCreateSubscription = async () => {
   actionError.value = '';
   actionMessage.value = '';
+  proofValidationError.value = '';
+  submissionLimitError.value = '';
   const payload = getUpgradePayload();
   if (!payload) {
     showPaymentModal.value = false;
     return;
   }
 
+  if (!hasPaymentProof.value) {
+    proofValidationError.value = 'Please provide either Reference No. or screenshot before saving.';
+    return;
+  }
+
   isSubmitting.value = true;
   try {
     const db = nuxtApp.$firebase.db;
+    const storage = nuxtApp.$firebase?.storage;
     const userUid = authStore.user?.uid;
     if (!userUid) {
       actionError.value = 'You must be logged in to update a subscription.';
       return;
     }
-    await addDoc(collection(db, 'subscriptions'), {
+
+    await refreshWeeklySubmissionCount();
+    if (!hasRemainingWeeklySubmissions.value) {
+      submissionLimitError.value = `You already reached ${MAX_WEEKLY_SUBMISSIONS} submissions this week.`;
+      return;
+    }
+
+    let screenshotUrl: string | null = null;
+    let screenshotPath: string | null = null;
+    let screenshotName: string | null = null;
+
+    if (paymentScreenshotFile.value) {
+      if (!storage) {
+        actionError.value = 'Storage is not available to upload screenshot.';
+        return;
+      }
+
+      const file = paymentScreenshotFile.value;
+      const safeName = file.name.replace(/\s+/g, '_');
+      const path = `subscriptions/${userUid}/${Date.now()}_${safeName}`;
+      const fileRef = storageRef(storage, path);
+      await uploadBytes(fileRef, file);
+      screenshotUrl = await getDownloadURL(fileRef);
+      screenshotPath = path;
+      screenshotName = file.name;
+    }
+
+    const newSubscriptionPayload = {
       userId: userUid,
       planId: selectedPlan.value.id,
       status: 'active',
+      referenceNo: referenceNo.value.trim() || null,
+      screenshotUrl,
+      screenshotPath,
+      screenshotName,
       startedAt: Timestamp.fromDate(payload.startDate),
       expiresAt: Timestamp.fromDate(payload.endDate),
       months: payload.months,
       totalAmount: totalAmount.value,
       monthlyPrice: selectedPlan.value.price,
+      clientCreatedAt: Date.now(),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
+    };
+
+    const newSubscriptionRef = await addDoc(collection(db, 'subscriptions'), newSubscriptionPayload);
 
     actionMessage.value = `Subscription updated. ${selectedPlan.value.name} x ${payload.months} month${payload.months > 1 ? 's' : ''} = ${formatMoney(totalAmount.value)}.`;
+    currentSubscription.value = {
+      id: newSubscriptionRef.id,
+      ...newSubscriptionPayload,
+    } as SubscriptionRecord;
+    selectedPlanId.value = selectedPlan.value.id;
+    billingEndDate.value = toInputDate(payload.endDate);
+    referenceNo.value = '';
+    paymentScreenshotFile.value = null;
     showPaymentModal.value = false;
-    await fetchSubscription();
+    await Promise.all([fetchSubscription(), refreshWeeklySubmissionCount()]);
   } catch (error: any) {
     actionError.value = error?.message || 'Failed to update subscription.';
   } finally {
@@ -907,11 +1096,12 @@ onMounted(fetchPageData);
 .payment-modal-card {
   width: 100%;
   max-width: 420px;
+  max-height: 90vh;
   border-radius: 22px;
   background: #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.2);
   box-shadow: 0 22px 60px rgba(2, 6, 23, 0.35);
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .payment-modal-header {
@@ -941,13 +1131,15 @@ onMounted(fetchPageData);
 .payment-modal-body {
   display: grid;
   justify-items: center;
-  gap: 12px;
-  padding: 20px;
+  gap: 10px;
+  padding: 16px;
 }
 
 .payment-qr-image {
   width: 100%;
-  max-width: 290px;
+  max-width: 220px;
+  max-height: 220px;
+  object-fit: contain;
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.25);
 }
@@ -962,6 +1154,29 @@ onMounted(fetchPageData);
   margin: 0;
   color: #0f172a;
   font-weight: 900;
+}
+
+.proof-grid {
+  width: 100%;
+  display: grid;
+  gap: 12px;
+}
+
+.payment-proof-file {
+  width: 100%;
+  margin: 0;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.payment-proof-note,
+.payment-limit-note {
+  width: 100%;
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .confirm-payment-btn {

@@ -138,7 +138,7 @@
 </template>
 
 <script setup lang="ts">
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where } from '~/utils/firestoreLogger';
 
 definePageMeta({
   layout: 'dashboard',

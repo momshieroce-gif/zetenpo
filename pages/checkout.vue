@@ -151,7 +151,7 @@
 <script setup lang="ts">
 import { GoogleMap, AdvancedMarker, InfoWindow } from 'vue3-google-map';
 import { ref, computed, watch, onMounted } from 'vue';
-import { doc, getDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from '~/utils/firestoreLogger';
 import type { Shop } from '~/types';
 
 definePageMeta({ middleware: 'auth' });

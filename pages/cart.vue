@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs } from '~/utils/firestoreLogger';
 import { ref, computed, watch, onMounted } from 'vue';
 
 const { cart, cartCount, removeFromCart, deliveryMethod, paymentMethod } = useCart();
