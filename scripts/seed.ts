@@ -404,7 +404,7 @@ async function seed() {
         name: `${adj} ${noun} ${i + 1}`,
         description: `A ${adj.toLowerCase()} ${noun.toLowerCase()} perfect for everyday use.`,
         price: parseFloat((Math.random() * 490 + 9.99).toFixed(2)),
-        stock: Math.floor(Math.random() * 200) + 1,
+        initialStock: Math.floor(Math.random() * 200) + 1,
         images: Array.from({ length: Math.floor(Math.random() * 3) + 4 }, (_, j) => `https://picsum.photos/seed/${shop.id}-${i}-${j}/300/200`),
         isActive: true,
         deletedAt: null,

@@ -123,7 +123,7 @@
 
 <script setup lang="ts">
 import { signOut } from 'firebase/auth';
-import { collection, getDocs, limit, logUserAuthActivity, orderBy, query } from '~/utils/firestoreLogger';
+import { collection, getDocs, limit, logUserAuthActivity, orderBy, query, where } from '~/utils/firestoreLogger';
 
 const authStore = useAuthStore();
 const { $firebase } = useNuxtApp() as any;
@@ -168,9 +168,15 @@ const fetchLatestUserLogs = async () => {
   try {
     const db = $firebase?.db;
     if (!db) throw new Error('Database is not available.');
+    const uid = authStore.user?.uid;
+    if (!uid) {
+      latestUserLogs.value = [];
+      return;
+    }
 
     const logsQuery = query(
       collection(db, 'userLogs'),
+      where('uid', '==', uid),
       orderBy('createdAt', 'desc'),
       limit(10)
     );

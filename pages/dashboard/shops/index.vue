@@ -52,18 +52,20 @@
               </span>
             </td>
             <td class="actions">
-              <button v-if="shop.ownerId === authStore.user?.uid" class="btn-icon members" @click="openMembers(shop)" title="Members">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              </button>
-              <button class="btn-icon products" @click="navigateTo('/dashboard/shops/' + shop.id + '/products')" title="Products">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-              </button>
-              <button v-if="shop.ownerId === authStore.user?.uid" class="btn-icon edit" @click="openEdit(shop)" title="Edit">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              </button>
-              <button v-if="shop.ownerId === authStore.user?.uid" class="btn-icon delete" @click="softDelete(shop.id)" title="Delete">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-              </button>
+              <template v-if="shop.isActive">
+                <button v-if="shop.ownerId === authStore.user?.uid" class="btn-icon members" @click="openMembers(shop)" title="Members">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </button>
+                <button class="btn-icon products" @click="navigateTo('/dashboard/shops/' + shop.id + '/products')" title="Products">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                </button>
+                <button v-if="shop.ownerId === authStore.user?.uid" class="btn-icon edit" @click="openEdit(shop)" title="Edit">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button v-if="shop.ownerId === authStore.user?.uid" class="btn-icon delete" @click="softDelete(shop.id)" title="Delete">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                </button>
+              </template>
             </td>
           </tr>
         </tbody>
@@ -109,24 +111,35 @@
             </div>
             <div class="field">
               <label>Latitude</label>
-              <input v-model.number="form.latitude" type="number" step="any" class="input" placeholder="Latitude" />
+              <input v-model.number="form.latitude" type="number" step="any" class="input" placeholder="Latitude" disabled />
             </div>
             <div class="field">
               <label>Longitude</label>
-              <input v-model.number="form.longitude" type="number" step="any" class="input" placeholder="Longitude" />
+              <input v-model.number="form.longitude" type="number" step="any" class="input" placeholder="Longitude" disabled />
+            </div>
+            <div class="field full">
+              <button type="button" class="btn btn-ghost detect-location-btn" :disabled="detectingLocation" @click="detectLocation">
+                {{ detectingLocation ? 'Detecting...' : 'Detect shop location' }}
+              </button>
+            </div>
+            <div class="field full">
+              <label>Upload business permit or government ID</label>
+              <input type="file" accept="image/*,video/*" class="input" :disabled="saving" @change="onPermitFileChange" />
+              <small v-if="permitFile" class="upload-meta">Selected: {{ permitFile.name }}</small>
+              <small v-else-if="permitUploadUrl" class="upload-meta">Existing file is attached.</small>
             </div>
             <div class="field full">
               <label>Description</label>
               <textarea v-model="form.description" class="input" rows="3" placeholder="Description"></textarea>
             </div>
-            <div class="field check">
+            <div v-if="isSuperAdmin" class="field check">
               <label class="checkbox">
                 <input v-model="form.isActive" type="checkbox" />
                 Active
               </label>
             </div>
           </div>
-          <div v-if="formError" class="error">{{ formError }}</div>
+          <div v-if="formError" ref="formErrorRef" class="error" tabindex="-1">{{ formError }}</div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-ghost" @click="closeModal">Cancel</button>
@@ -263,6 +276,7 @@
 
 <script setup lang="ts">
 import { collection, addDoc, doc, documentId, getDocs, getDoc, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from '~/utils/firestoreLogger';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { Shop, Product } from '~/types';
 
 definePageMeta({
@@ -284,6 +298,10 @@ const isEditing = ref(false);
 const editingId = ref<string | null>(null);
 const saving = ref(false);
 const formError = ref('');
+const formErrorRef = ref<HTMLElement | null>(null);
+const detectingLocation = ref(false);
+const initialLatitude = ref(0);
+const initialLongitude = ref(0);
 const fetchError = ref('');
 const showDeleteModal = ref(false);
 const deletingId = ref<string | null>(null);
@@ -295,6 +313,10 @@ const productError = ref('');
 const productSaving = ref(false);
 const isEditingProduct = ref(false);
 const editingProductId = ref<string | null>(null);
+const shopNameCheckDelayMs = 800;
+const permitFile = ref<File | null>(null);
+const permitUploadUrl = ref('');
+const permitUploadPath = ref('');
 const productForm = reactive({
   name: '',
   description: '',
@@ -305,6 +327,8 @@ const productForm = reactive({
 const perPage = 20;
 const currentPage = ref(1);
 const searchQuery = ref('');
+const currentUserRole = computed(() => String(authStore.user?.role || authStore.user?.roleId || '').trim().toLowerCase());
+const isSuperAdmin = computed(() => currentUserRole.value === 'super-admin' || currentUserRole.value === 'super admin');
 const filteredShops = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   if (!q) return shops.value;
@@ -343,6 +367,11 @@ const memberSuccess = ref('');
 const shopMembers = ref<any[]>([]);
 const showMembersModal = ref(false);
 const selectedShopForMembers = ref<Shop | null>(null);
+const SHOP_LIMITS_BY_PLAN: Record<string, number> = {
+  free: 1,
+  basic: 3,
+  premium: 10,
+};
 
 const openMembers = (shop: Shop) => {
   resetMembers();
@@ -448,7 +477,10 @@ const resetForm = () => {
   form.longitude = 0;
   form.phone = '';
   form.logo = '';
-  form.isActive = true;
+  form.isActive = isSuperAdmin.value;
+  permitFile.value = null;
+  permitUploadUrl.value = '';
+  permitUploadPath.value = '';
   isEditing.value = false;
   editingId.value = null;
   formError.value = '';
@@ -456,6 +488,8 @@ const resetForm = () => {
 
 const openCreate = () => {
   resetForm();
+  initialLatitude.value = Number(form.latitude) || 0;
+  initialLongitude.value = Number(form.longitude) || 0;
   showModal.value = true;
 };
 
@@ -469,13 +503,67 @@ const openEdit = (shop: Shop) => {
   form.longitude = shop.longitude || 0;
   form.phone = shop.phone || '';
   form.logo = shop.logo || '';
-  form.isActive = shop.isActive !== false;
+  form.isActive = isSuperAdmin.value ? shop.isActive !== false : false;
+  initialLatitude.value = Number(shop.latitude || 0);
+  initialLongitude.value = Number(shop.longitude || 0);
+  permitFile.value = null;
+  permitUploadUrl.value = (shop as any).businessPermitUrl || '';
+  permitUploadPath.value = (shop as any).businessPermitPath || '';
   showModal.value = true;
 };
 
 const closeModal = () => {
   showModal.value = false;
   resetForm();
+};
+
+const onPermitFileChange = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0] || null;
+  if (!file) {
+    permitFile.value = null;
+    return;
+  }
+  const isImageOrVideo = file.type.startsWith('image/') || file.type.startsWith('video/');
+  if (!isImageOrVideo) {
+    formError.value = 'Please upload an image or video file only.';
+    target.value = '';
+    permitFile.value = null;
+    focusFormError();
+    return;
+  }
+  permitFile.value = file;
+  formError.value = '';
+};
+
+const focusFormError = async () => {
+  await nextTick();
+  if (!formErrorRef.value) return;
+  formErrorRef.value.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  formErrorRef.value.focus({ preventScroll: true });
+};
+
+const detectLocation = () => {
+  if (!('geolocation' in navigator)) {
+    formError.value = 'Geolocation is not supported by this browser.';
+    focusFormError();
+    return;
+  }
+
+  detectingLocation.value = true;
+  formError.value = '';
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      form.latitude = position.coords.latitude;
+      form.longitude = position.coords.longitude;
+      detectingLocation.value = false;
+    },
+    (error) => {
+      detectingLocation.value = false;
+      formError.value = 'Unable to retrieve location: ' + (error?.message || 'permission denied');
+      focusFormError();
+    }
+  );
 };
 
 const fetchShops = async () => {
@@ -537,14 +625,136 @@ const fetchShops = async () => {
   }
 };
 
+const resolveCurrentPlanId = async (uid: string) => {
+  if (!db) return 'free';
+  const subscriptionsSnap = await getDocs(query(collection(db, 'subscriptions'), where('userId', '==', uid)));
+  if (subscriptionsSnap.empty) return 'free';
+
+  const latest = subscriptionsSnap.docs
+    .map((d: any) => ({ id: d.id, ...(d.data() as any) }))
+    .sort((a: any, b: any) => {
+      const aTime =
+        a?.updatedAt?.toDate?.()?.getTime?.() ||
+        a?.createdAt?.toDate?.()?.getTime?.() ||
+        Number(a?.clientCreatedAt || 0);
+      const bTime =
+        b?.updatedAt?.toDate?.()?.getTime?.() ||
+        b?.createdAt?.toDate?.()?.getTime?.() ||
+        Number(b?.clientCreatedAt || 0);
+      return bTime - aTime;
+    })[0];
+
+  return String(latest?.planId || 'free').trim().toLowerCase();
+};
+
+const countOwnedActiveShops = async (uid: string) => {
+  if (!db) return 0;
+  const ownedShopsSnap = await getDocs(query(collection(db, 'shops'), where('ownerId', '==', uid)));
+  return ownedShopsSnap.docs.filter((d: any) => {
+    const data = d.data() as any;
+    return !data?.deletedAt;
+  }).length;
+};
+
 const save = async () => {
   formError.value = '';
   if (!form.name.trim()) {
     formError.value = 'Name is required.';
+    focusFormError();
     return;
   }
+  if (!form.phone.trim()) {
+    formError.value = 'Phone is required.';
+    focusFormError();
+    return;
+  }
+  if (!form.address.trim()) {
+    formError.value = 'Address is required.';
+    focusFormError();
+    return;
+  }
+  if (!form.description.trim()) {
+    formError.value = 'Description is required.';
+    focusFormError();
+    return;
+  }
+  const latUnchanged = Number(form.latitude) === Number(initialLatitude.value);
+  const lngUnchanged = Number(form.longitude) === Number(initialLongitude.value);
+  if (latUnchanged && lngUnchanged) {
+    formError.value = 'Latitude and longitude have not changed. Please detect shop location before saving.';
+    focusFormError();
+    return;
+  }
+  if (!isEditing.value && !permitFile.value) {
+    formError.value = 'Upload business permit or government ID is required.';
+    focusFormError();
+    return;
+  }
+
+  if (!isEditing.value) {
+    if (!db) {
+      formError.value = 'Firebase is not available.';
+      focusFormError();
+      return;
+    }
+    const uid = authStore.user?.uid || '';
+    if (!uid) {
+      formError.value = 'User is not authenticated.';
+      focusFormError();
+      return;
+    }
+
+    const planId = await resolveCurrentPlanId(uid);
+    const maxShops = SHOP_LIMITS_BY_PLAN[planId] || SHOP_LIMITS_BY_PLAN.free;
+    const ownedShopCount = await countOwnedActiveShops(uid);
+    if (ownedShopCount >= maxShops) {
+      await navigateTo({
+        path: '/dashboard/subscriptions',
+        query: {
+          upgradeReason: 'shop-limit',
+          planId,
+          maxShops: String(maxShops),
+        },
+      });
+      return;
+    }
+  }
+
   saving.value = true;
   try {
+    if (!db) throw new Error('Firebase is not available.');
+
+    const normalizedName = form.name.trim();
+    await new Promise((resolve) => setTimeout(resolve, shopNameCheckDelayMs));
+    const duplicateSnap = await getDocs(query(collection(db, 'shops'), where('name', '==', normalizedName)));
+    const hasDuplicate = duplicateSnap.docs.some((d: any) => {
+      const data = d.data() as any;
+      if (data?.deletedAt) return false;
+      if (isEditing.value && editingId.value && d.id === editingId.value) return false;
+      return true;
+    });
+    if (hasDuplicate) {
+      formError.value = 'Shop name already exists. Please use a different name.';
+      focusFormError();
+      return;
+    }
+
+    let uploadedPermitUrl = permitUploadUrl.value;
+    let uploadedPermitPath = permitUploadPath.value;
+
+    if (permitFile.value) {
+      const storage = nuxtApp.$firebase?.storage;
+      if (!storage) throw new Error('Storage is not available for uploads.');
+
+      const ownerId = authStore.user?.uid || 'unknown';
+      const safeName = permitFile.value.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `shops/${ownerId}/documents/${Date.now()}_${safeName}`;
+      const fileRef = storageRef(storage, path);
+      await uploadBytes(fileRef, permitFile.value);
+      uploadedPermitUrl = await getDownloadURL(fileRef);
+      uploadedPermitPath = path;
+    }
+
     const payload = {
       name: form.name.trim(),
       description: form.description.trim(),
@@ -553,7 +763,10 @@ const save = async () => {
       longitude: Number(form.longitude),
       phone: form.phone.trim(),
       logo: form.logo.trim(),
-      isActive: form.isActive,
+      businessPermitUrl: uploadedPermitUrl || null,
+      businessPermitPath: uploadedPermitPath || null,
+      businessPermitType: permitFile.value?.type || null,
+      isActive: isSuperAdmin.value ? form.isActive : false,
       updatedAt: serverTimestamp(),
     };
     if (isEditing.value && editingId.value) {
@@ -570,6 +783,7 @@ const save = async () => {
     closeModal();
   } catch (e: any) {
     formError.value = e?.message || 'Save failed.';
+    focusFormError();
   } finally {
     saving.value = false;
   }
@@ -759,19 +973,22 @@ onMounted(() => {
 .btn-icon.delete { color: #ef4444; }
 .btn-icon.delete:hover { background: #fef2f2; border-color: #fecaca; }
 .modal-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; }
-.modal-card { width: 100%; max-width: 520px; background: #fff; border-radius: 24px; box-shadow: 0 24px 60px rgba(0,0,0,0.2); overflow: hidden; }
+.modal-card { width: 100%; max-width: 520px; max-height: calc(100vh - 40px); background: #fff; border-radius: 24px; box-shadow: 0 24px 60px rgba(0,0,0,0.2); overflow: hidden; display: flex; flex-direction: column; }
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #f1f5f9; }
 .modal-header h3 { margin: 0; font-size: 18px; font-weight: 800; color: #0f172a; }
 .close-btn { background: none; border: none; font-size: 24px; color: #64748b; cursor: pointer; }
-.modal-body { padding: 24px; }
-.modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 24px 24px; }
+.modal-body { padding: 24px; overflow-y: auto; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 24px 24px; border-top: 1px solid #f1f5f9; background: #fff; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .form-grid .full { grid-column: span 2; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label { font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; }
 .field .input { padding: 10px 14px; border-radius: 10px; border: 1px solid #e2e8f0; font-size: 14px; outline: none; }
 .field .input:focus { border-color: #fbbf24; box-shadow: 0 0 0 3px rgba(251,191,36,0.15); }
+.field .input:disabled { background: #f8fafc; color: #94a3b8; cursor: not-allowed; }
 .field.check { flex-direction: row; align-items: center; }
+.detect-location-btn { justify-content: center; }
+.upload-meta { font-size: 12px; color: #64748b; }
 .checkbox { display: flex; align-items: center; gap: 8px; font-weight: 600; color: #0f172a; text-transform: none; cursor: pointer; }
 .error { margin-top: 12px; font-size: 13px; color: #dc2626; background: #fef2f2; padding: 10px 12px; border-radius: 10px; }
 .member-add-row { display: flex; gap: 10px; align-items: center; }

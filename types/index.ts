@@ -48,7 +48,10 @@ export interface Product {
   price?: number;
   currency?: string;
   images: string[];
+  defaultImage?: string;
   category?: string;
+  initialStock?: number;
+  currentStock?: number;
   isAvailable?: boolean;
   latitude?: number;
   longitude?: number;

@@ -185,6 +185,22 @@
         </div>
       </div>
     </div>
+
+    <div v-if="showPlanLimitModal" class="plan-limit-modal-overlay" @click.self="closePlanLimitModal">
+      <div class="plan-limit-modal-card">
+        <div class="plan-limit-header">
+          <div>
+            <p class="section-kicker">Upgrade Required</p>
+            <h3>Shop Limit Reached</h3>
+          </div>
+          <button class="payment-close-btn" @click="closePlanLimitModal">&times;</button>
+        </div>
+        <div class="plan-limit-body">
+          <p class="plan-limit-message">{{ planLimitModalMessage }}</p>
+          <button class="apply-btn" @click="closePlanLimitModal">Close</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -280,6 +296,7 @@ const subscriptionPlans = ref<SubscriptionPlan[]>(planOrder.map((id) => createPl
 
 const nuxtApp = useNuxtApp() as any;
 const authStore = useAuthStore();
+const route = useRoute();
 const loading = ref(true);
 const fetchError = ref('');
 const currentSubscription = ref<SubscriptionRecord | null>(null);
@@ -294,6 +311,8 @@ const paymentScreenshotFile = ref<File | null>(null);
 const proofValidationError = ref('');
 const submissionLimitError = ref('');
 const weeklySubmissionCount = ref(0);
+const showPlanLimitModal = ref(false);
+const planLimitModalMessage = ref('');
 
 const MAX_WEEKLY_SUBMISSIONS = 3;
 
@@ -575,6 +594,33 @@ const closePaymentModal = () => {
   submissionLimitError.value = '';
 };
 
+const closePlanLimitModal = async () => {
+  showPlanLimitModal.value = false;
+  const nextQuery = { ...route.query } as Record<string, any>;
+  delete nextQuery.upgradeReason;
+  delete nextQuery.planId;
+  delete nextQuery.maxShops;
+  await navigateTo({ path: route.path, query: nextQuery }, { replace: true });
+};
+
+const openPlanLimitModalFromQuery = () => {
+  const reason = String(route.query.upgradeReason || '');
+  if (reason !== 'shop-limit' && reason !== 'product-limit') return;
+
+  const planId = String(route.query.planId || 'free').toLowerCase();
+  const prettyPlan = planId.charAt(0).toUpperCase() + planId.slice(1);
+
+  if (reason === 'shop-limit') {
+    const maxShops = Number(route.query.maxShops || 1) || 1;
+    planLimitModalMessage.value = `Your ${prettyPlan} plan allows only ${maxShops} shop${maxShops > 1 ? 's' : ''}. Please upgrade your subscription to create more shops.`;
+  } else {
+    const maxProducts = Number(route.query.maxProducts || 1) || 1;
+    planLimitModalMessage.value = `Your ${prettyPlan} plan allows only ${maxProducts} product${maxProducts > 1 ? 's' : ''} per shop. Please upgrade your subscription to add more products.`;
+  }
+
+  showPlanLimitModal.value = true;
+};
+
 const onPaymentScreenshotChange = (event: Event) => {
   proofValidationError.value = '';
 
@@ -703,7 +749,10 @@ const confirmPaymentAndCreateSubscription = async () => {
   }
 };
 
-onMounted(fetchPageData);
+onMounted(() => {
+  fetchPageData();
+  openPlanLimitModalFromQuery();
+});
 </script>
 
 <style scoped>
@@ -1194,6 +1243,56 @@ onMounted(fetchPageData);
 .confirm-payment-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.plan-limit-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  background: rgba(2, 6, 23, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.plan-limit-modal-card {
+  width: 100%;
+  max-width: 460px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, #ffffff 0%, #fff7ed 100%);
+  border: 1px solid rgba(251, 146, 60, 0.28);
+  box-shadow: 0 26px 70px rgba(2, 6, 23, 0.35);
+  overflow: hidden;
+}
+
+.plan-limit-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(251, 146, 60, 0.2);
+}
+
+.plan-limit-header h3 {
+  margin: 4px 0 0;
+  color: #111827;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.plan-limit-body {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.plan-limit-message {
+  margin: 0;
+  color: #334155;
+  line-height: 1.7;
 }
 
 .schema-block {
