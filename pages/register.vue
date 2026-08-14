@@ -36,6 +36,12 @@
         </div>
 
         <form v-if="!emailSent" class="register-form" @submit.prevent="register">
+          <div class="role-toggle">
+            <label class="role-toggle-label" for="register-store-admin">
+              <input id="register-store-admin" v-model="isStoreAdmin" type="checkbox" />
+              <span>I want to sell my products</span>
+            </label>
+          </div>
           <div class="field">
             <label class="field-label">Full name</label>
             <input v-model="name" type="text" class="input" placeholder="John Doe" required autocomplete="name" />
@@ -51,13 +57,13 @@
           <div class="field">
             <label class="field-label">Password</label>
             <div class="password-wrap">
-              <input v-model="password" :type="showPassword ? 'text' : 'password'" class="input" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password" />
+              <input v-model="password" :type="showPassword ? 'text' : 'password'" class="input" placeholder="At least 8 characters" required minlength="8" pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$" title="Must be at least 8 characters and include uppercase, lowercase, number, and special character." autocomplete="new-password" />
               <button type="button" class="toggle-password" @click="showPassword = !showPassword">{{ showPassword ? 'Hide' : 'Show' }}</button>
             </div>
           </div>
           <div class="field">
             <label class="field-label">Confirm password</label>
-            <input v-model="confirmPassword" :type="showPassword ? 'text' : 'password'" class="input" placeholder="Re-enter your password" required minlength="6" autocomplete="new-password" />
+            <input v-model="confirmPassword" :type="showPassword ? 'text' : 'password'" class="input" placeholder="Re-enter your password" required minlength="8" pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$" title="Must be at least 8 characters and include uppercase, lowercase, number, and special character." autocomplete="new-password" />
           </div>
           <button type="submit" class="btn btn-primary w-full" :disabled="loading">
             <span v-if="loading">Creating account...</span>
@@ -100,6 +106,7 @@ const phone = ref('');
 const password = ref('');
 const confirmPassword = ref('');
 const showPassword = ref(false);
+const isStoreAdmin = ref(false);
 const loading = ref(false);
 const error = ref('');
 const emailSent = ref(false);
@@ -112,8 +119,18 @@ const hashPassword = async (value: string) => {
     .join('');
 };
 
+const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/;
+
 const register = async () => {
   error.value = '';
+  if (password.value.length < 8) {
+    error.value = 'Password must be at least 8 characters.';
+    return;
+  }
+  if (!strongPasswordRegex.test(password.value)) {
+    error.value = 'Password must include uppercase, lowercase, number, and special character.';
+    return;
+  }
   if (password.value !== confirmPassword.value) {
     error.value = 'Passwords do not match.';
     return;
@@ -132,8 +149,8 @@ const register = async () => {
       email: email.value,
       phone: phone.value || '',
       password_hash: await hashPassword(password.value),
-      roleId: 'customer',
-      role: 'Customer',
+      roleId: isStoreAdmin.value ? 'store-admin' : 'customer',
+      role: isStoreAdmin.value ? 'Store Admin' : 'Customer',
       isActive: true,
       emailVerified: false,
       createdAt: serverTimestamp(),
@@ -185,6 +202,9 @@ const register = async () => {
 .form-title { font-size: 26px; font-weight: 800; margin: 0 0 4px; color: #0f172a; }
 .form-subtitle { font-size: 14px; color: #64748b; margin: 0; }
 .register-form { display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; }
+.role-toggle { display: flex; align-items: center; margin-bottom: 4px; }
+.role-toggle-label { display: inline-flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: #334155; cursor: pointer; }
+.role-toggle-label input { width: 16px; height: 16px; accent-color: #f59e0b; cursor: pointer; }
 .field { display: flex; flex-direction: column; gap: 7px; }
 .field-label { font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.6px; }
 .password-wrap { position: relative; }

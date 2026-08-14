@@ -43,7 +43,7 @@
                 <div class="user-avatar">{{ initials }}</div>
                 <div class="user-details">
                   <div class="user-name">{{ authStore.displayName || 'User' }}</div>
-                  <div class="user-role">Member</div>
+                  <div class="user-role">{{ authStore.user?.role || 'Member' }}</div>
                 </div>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" class="expand-icon" :class="{ open: userMenuOpen }"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z" fill="currentColor"/></svg>
               </button>
