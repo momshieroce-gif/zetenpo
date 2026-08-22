@@ -66,8 +66,7 @@ onMounted(fetchData);
         <NuxtLink to="/find-shops" class="back-link">← Back to search</NuxtLink>
         <div v-if="shop" class="shop-header">
           <h1 class="shop-name">{{ shop.name }}</h1>
-          <p v-if="shop.address" class="shop-meta">{{ shop.address }}</p>
-          <p v-if="shop.phone" class="shop-meta">{{ shop.phone }}</p>
+          <p v-if="shop.address" class="shop-meta">{{ shop.address }},&nbsp; {{ shop.phone }}</p>
         </div>
         <div v-else-if="!loading" class="shop-header">
           <h1 class="shop-name">Shop not found</h1>
@@ -199,24 +198,29 @@ onMounted(fetchData);
 
 .shop-header {
   margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .shop-name {
-  font-size: 32px;
+  font-size: 24px;
   font-weight: 900;
   margin: 0 0 8px;
+  overflow-wrap: anywhere;
 }
 
 .shop-meta {
-  font-size: 14px;
+  font-size: 12px;
   color: rgba(255,255,255,0.7);
   margin: 2px 0;
+  overflow-wrap: anywhere;
 }
 
 .products-section {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 40px 24px;
+  padding: 20px 0px;
 }
 
 .section-title {
@@ -415,4 +419,49 @@ onMounted(fetchData);
 .modal-btn-primary:hover { background: #d97706; }
 .modal-btn-ghost { background: transparent; color: #64748b; }
 .modal-btn-ghost:hover { background: #f1f5f9; }
+
+@media (max-width: 600px) {
+  .shop-hero {
+    padding: 28px 0 22px;
+  }
+
+  .shop-hero-inner {
+    padding: 0 16px;
+  }
+
+  .shop-name {
+    font-size: 20px;
+  }
+
+  .shop-meta {
+    font-size: 11px;
+  }
+
+  .products-section {
+    padding: 20px 16px;
+  }
+
+  .products-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .product-actions {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 450px) {
+      .products-section {
+        padding: 10px 0px;
+      }
+}
+
+@media (max-width: 400px) {
+  .shop-header {
+    flex-direction: column;
+    gap: 0px;
+  }
+
+}
+
 </style>

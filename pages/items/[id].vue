@@ -400,7 +400,7 @@ onMounted(fetchData);
 }
 
 .item-name {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 900;
   margin: 0 0 8px;
 }
@@ -482,8 +482,6 @@ onMounted(fetchData);
 }
 
 .thumbnails {
-  display: flex;
-  gap: 10px;
   overflow-x: auto;
 }
 
@@ -497,6 +495,7 @@ onMounted(fetchData);
   background: #f3f4f6;
   padding: 0;
   transition: border-color 0.2s;
+  margin: 2px;
 }
 
 .thumb.active {
@@ -627,9 +626,6 @@ onMounted(fetchData);
       grid-template-columns: 1fr;
     }
 
-    .item-actions {
-      flex-direction: column;
-    }
   }
 
 .modal-btn-primary { background: #f59e0b; color: #fff; }

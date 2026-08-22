@@ -9,18 +9,13 @@
       <div class="container map-hero-inner">
         <div class="map-hero-left">
           <div class="map-hero-icon green-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="#fff"/></svg>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M20 8.5 12 4 4 8.5v7L12 20l8-4.5v-7zM12 20v-8.5M4.3 8.7 12 13l7.7-4.3M8 6.25l8 4.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <div>
             <div class="map-hero-label">Product Search</div>
             <h1 class="map-hero-title">Find Nearby Items</h1>
             <p class="map-hero-desc">Search products across local stores and get directions instantly.</p>
           </div>
-        </div>
-        <div class="map-hero-stats">
-          <div class="stat-box"><div class="stat-box-value">{{ filteredItems.length }}</div><div class="stat-box-label">{{ filteredItems.length === 1 ? 'Item' : 'Items' }} Found</div></div>
-          <div class="stat-divider"></div>
-          <div class="stat-box"><div class="stat-box-value">{{ radius }}</div><div class="stat-box-label">Search Radius (km)</div></div>
         </div>
       </div>
       <div class="container action-bar">

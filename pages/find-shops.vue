@@ -17,11 +17,6 @@
             <p class="map-hero-desc">Discover verified local stores around you and get directions in seconds.</p>
           </div>
         </div>
-        <div class="map-hero-stats">
-          <div class="stat-box"><div class="stat-box-value">{{ filteredShops.length }}</div><div class="stat-box-label">{{ filteredShops.length === 1 ? 'Shop' : 'Shops' }} Found</div></div>
-          <div class="stat-divider"></div>
-          <div class="stat-box"><div class="stat-box-value">{{ radius }}</div><div class="stat-box-label">Search Radius (km)</div></div>
-        </div>
       </div>
       <div class="container action-bar">
         <button class="btn btn-ghost-action" @click="getLocation">My Location</button>

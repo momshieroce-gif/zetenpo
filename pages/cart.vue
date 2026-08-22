@@ -114,7 +114,7 @@ useHead({
             <div class="option-card">
               <div class="option-card-header">
                 <div class="option-icon-wrap">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M18 18H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2zm0-12H6v10h12V6z" fill="#fff"/></svg>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 22s7-6.16 7-13a7 7 0 1 0-14 0c0 6.84 7 13 7 13z" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="9" r="2.5" stroke="#fff" stroke-width="2"/></svg>
                 </div>
                 <span class="option-card-title">Delivery Method</span>
               </div>
@@ -248,7 +248,7 @@ useHead({
 .cart-body {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 40px 24px;
+  padding: 20px 0px;
 }
 
 .empty-state {

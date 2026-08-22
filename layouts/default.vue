@@ -72,6 +72,7 @@
     </header>
 
     <main class="main">
+      <br class="mobile-only-break" />
       <slot />
     </main>
 
@@ -213,6 +214,7 @@ onUnmounted(() => { document.removeEventListener('click', onClickOutside); });
 .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(251, 191, 36, 0.45); }
 
 .main { flex: 1; padding-top: 72px; }
+.mobile-only-break { display: none; }
 
 /* Footer */
 .footer { position: relative; background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%); color: #fff; padding: 72px 0 32px; overflow: hidden; }
@@ -249,5 +251,11 @@ onUnmounted(() => { document.removeEventListener('click', onClickOutside); });
   .logo-tagline, .user-details { display: none; }
   .main { padding-top: 64px; }
   .logout-dialog-card { min-width: calc(100% - 32px); max-width: 420px; }
+}
+
+@media (max-width: 500px) {
+  .mobile-only-break { display: block; }
+  .header { height: 100px; }
+  .header-inner { flex-direction: column; align-items: center; height: auto; }
 }
 </style>
