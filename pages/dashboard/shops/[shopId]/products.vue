@@ -644,7 +644,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.products-page { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+.products-page { max-width: 1100px; margin: 0 auto; padding: 24px 0px; }
 .page-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 32px; }
 .header-left { display: flex; align-items: center; gap: 16px; }
 .header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

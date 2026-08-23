@@ -39,14 +39,7 @@
               <td>{{ formatTotal(tx) }}</td>
               <td>{{ tx.payment_method || '-' }}</td>
               <td>
-                <template v-if="canManageStatuses">
-                  <select class="status-select" :value="tx.status || 'pending'" @change="handleStatusChange($event, tx)">
-                    <option v-for="status in statusList" :key="status.slug" :value="status.slug">
-                      {{ status.name || displayStatus(status.slug) }}
-                    </option>
-                  </select>
-                </template>
-                <span v-else class="badge" :class="statusClass(tx.status)">
+                <span class="badge" :class="statusClass(tx.status)">
                   <span class="dot"></span>
                   {{ displayStatus(tx.status) }}
                 </span>
@@ -100,14 +93,7 @@
             <div class="detail-item">
               <span class="detail-label">Status</span>
               <div class="detail-value">
-                <template v-if="canManageStatuses">
-                  <select class="status-select" :value="selectedTransaction.status || 'pending'" @change="handleStatusChange($event, selectedTransaction)">
-                    <option v-for="status in statusList" :key="status.slug" :value="status.slug">
-                      {{ status.name || displayStatus(status.slug) }}
-                    </option>
-                  </select>
-                </template>
-                <span v-else class="badge" :class="statusClass(selectedTransaction.status)">
+                <span class="badge" :class="statusClass(selectedTransaction.status)">
                   <span class="dot"></span>
                   {{ displayStatus(selectedTransaction.status) }}
                 </span>
@@ -260,7 +246,7 @@
 </template>
 
 <script setup lang="ts">
-import { addDoc, collection, doc, documentId, getDocs, query, serverTimestamp, updateDoc, where } from '~/utils/firestoreLogger';
+import { addDoc, collection, doc, documentId, getDocs, query, serverTimestamp, where } from '~/utils/firestoreLogger';
 
 interface Transaction {
   id: string;
@@ -377,34 +363,9 @@ const humanize = (str: string) => str.replace(/-/g, ' ').replace(/\b\w/g, c => c
 
 const statusList = ref<any[]>([]);
 const statusMap = computed(() => Object.fromEntries(statusList.value.map((s: any) => [s.slug, s])));
-const canManageStatuses = computed(() => {
-  const roleId = authStore.user?.roleId || '';
-  return ['super-admin', 'store-admin', 'store-staff'].includes(roleId);
-});
-
 const displayStatus = (status?: string) => {
   if (!status) return 'Pending';
   return statusMap.value[status]?.name || humanize(status);
-};
-
-
-const updateTransactionStatus = async (tx: Transaction | null, status: string) => {
-  if (!tx?.id || !status || !canManageStatuses.value) return;
-  const previousStatus = tx.status;
-  try {
-    if (!db) throw new Error('Firebase is not available.');
-    tx.status = status;
-    await updateDoc(doc(db, 'transactions', tx.id), { status, updatedAt: serverTimestamp() });
-  } catch (e: any) {
-    tx.status = previousStatus;
-    fetchError.value = e?.message || 'Failed to update transaction status.';
-  }
-};
-
-const handleStatusChange = (event: Event, tx: Transaction | null) => {
-  const target = event.target as HTMLSelectElement | null;
-  if (!target || !tx) return;
-  void updateTransactionStatus(tx, target.value);
 };
 
 const selectedTransaction = ref<Transaction | null>(null);
@@ -544,82 +505,15 @@ const fetchTransactions = async () => {
   try {
     if (!db) throw new Error('Firebase is not available.');
     const uid = authStore.user?.uid || '';
-    const roleId = authStore.user?.roleId || '';
-
-    let shopIdFilter: string[] | null = null;
-    const isCustomer = roleId === 'customer';
-    const isStoreAdmin = roleId === 'store-admin';
 
     const statusSnap = await getDocs(collection(db, 'transaction_statuses'));
     statusList.value = statusSnap.docs.map((d: any) => d.data());
 
-    let fetched: Transaction[] = [];
+    const txSnap = await getDocs(query(collection(db, 'transactions'), where('user_id', '==', uid)));
+    const fetched = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
+    const storeIds = [...new Set(fetched.map(tx => tx.store_id).filter(Boolean))] as string[];
+    shopMap.value = storeIds.length ? await getShopMapByIds(storeIds) : {};
 
-    if (isCustomer) {
-      const txSnap = await getDocs(query(collection(db, 'transactions'), where('user_id', '==', uid)));
-      fetched = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
-    } else if (isStoreAdmin) {
-      const ownerShopsSnap = await getDocs(query(collection(db, 'shops'), where('ownerId', '==', uid)));
-      const ownerShopIds = ownerShopsSnap.docs.map((d: any) => d.id).filter(Boolean);
-
-      const membersSnap = await getDocs(query(collection(db, 'shopMembers'), where('uid', '==', uid)));
-      const memberShopIds = membersSnap.docs.map((d: any) => d.data().shopId).filter(Boolean);
-
-      const allowedShopIds = [...new Set([...ownerShopIds, ...memberShopIds])];
-      if (allowedShopIds.length) {
-        const chunks: string[][] = [];
-        for (let i = 0; i < allowedShopIds.length; i += 30) {
-          chunks.push(allowedShopIds.slice(i, i + 30));
-        }
-        const txSnaps = await Promise.all(
-          chunks.map(ids => getDocs(query(collection(db, 'transactions'), where('store_id', 'in', ids))))
-        );
-        fetched = txSnaps.flatMap((snap: any) => snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
-        shopMap.value = await getShopMapByIds(allowedShopIds);
-      } else {
-        fetched = [];
-        shopMap.value = {};
-      }
-    } else if (roleId === 'store-staff') {
-      const membersSnap = await getDocs(query(collection(db, 'shopMembers'), where('uid', '==', uid)));
-      shopIdFilter = membersSnap.docs.map((d: any) => d.data().shopId).filter(Boolean);
-      if (shopIdFilter.length) {
-        const chunks: string[][] = [];
-        for (let i = 0; i < shopIdFilter.length; i += 30) {
-          chunks.push(shopIdFilter.slice(i, i + 30));
-        }
-        const txSnaps = await Promise.all(
-          chunks.map(ids => getDocs(query(collection(db, 'transactions'), where('store_id', 'in', ids))))
-        );
-        fetched = txSnaps.flatMap((snap: any) => snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
-      } else {
-        fetched = [];
-      }
-    } else if (roleId === 'store-delivery') {
-      const membersSnap = await getDocs(query(collection(db, 'shopMembers'), where('uid', '==', uid)));
-      shopIdFilter = membersSnap.docs.map((d: any) => d.data().shopId).filter(Boolean);
-      const txSnap = await getDocs(collection(db, 'transactions'));
-      fetched = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
-      if (shopIdFilter) {
-        fetched = fetched.filter(tx => tx.store_id && shopIdFilter!.includes(tx.store_id));
-      }
-    } else {
-      const txSnap = await getDocs(collection(db, 'transactions'));
-      fetched = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
-    }
-
-    if (isCustomer) {
-      // Only fetch the shops referenced by the customer's own transactions
-      const storeIds = [...new Set(fetched.map(tx => tx.store_id).filter(Boolean))] as string[];
-      if (storeIds.length) {
-        shopMap.value = await getShopMapByIds(storeIds);
-      } else {
-        shopMap.value = {};
-      }
-    } else if (!isStoreAdmin) {
-      const shopSnap = await getDocs(collection(db, 'shops'));
-      shopMap.value = Object.fromEntries(shopSnap.docs.map((d: any) => [d.id, d.data().name || d.id]));
-    }
     fetched.sort((a, b) => {
       const da = toDate(a.createdAt)?.getTime() || 0;
       const db = toDate(b.createdAt)?.getTime() || 0;

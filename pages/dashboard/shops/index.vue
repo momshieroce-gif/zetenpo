@@ -441,6 +441,11 @@ const addMember = async () => {
       memberError.value = 'This user is already a member of this shop.';
       return;
     }
+    await updateDoc(doc(db, 'users', uid), {
+      roleId: 'store-staff',
+      role: 'Store Staff',
+      updatedAt: serverTimestamp(),
+    });
     await setDoc(doc(db, 'shopMembers', memberId), {
       shopId,
       uid,
@@ -463,6 +468,14 @@ const removeMember = async (member: any) => {
   memberSuccess.value = '';
   try {
     await deleteDoc(doc(db, 'shopMembers', member.id));
+    const remainingMemberships = await getDocs(query(collection(db, 'shopMembers'), where('uid', '==', member.uid)));
+    if (remainingMemberships.empty && member.uid) {
+      await updateDoc(doc(db, 'users', member.uid), {
+        roleId: 'customer',
+        role: 'Customer',
+        updatedAt: serverTimestamp(),
+      });
+    }
     shopMembers.value = shopMembers.value.filter((m: any) => m.id !== member.id);
   } catch (e: any) {
     memberError.value = e?.message || 'Failed to remove member.';

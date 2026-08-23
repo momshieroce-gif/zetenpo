@@ -42,8 +42,12 @@
                 <span v-else>-</span>
               </td>
               <td class="actions">
-                <button class="btn-icon view" title="Open" @click.stop="openChat(c)">??</button>
-                <button class="btn-icon cancel" title="Delete" @click.stop="deleteChat(c)">???</button>
+                <button class="btn-icon view" title="Open messages" aria-label="Open messages" @click.stop="openChat(c)">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.5 8.5 8.5 0 0 1-4.1-1.05L3 20l1.05-4.9A8.5 8.5 0 1 1 21 11.5z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg>
+                </button>
+                <button class="btn-icon cancel" title="Delete inquiry" aria-label="Delete inquiry" @click.stop="deleteChat(c)">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg>
+                </button>
               </td>
             </tr>
           </tbody>
@@ -71,7 +75,7 @@
           <h3>
             <NuxtLink v-if="selectedChat?.productId" :to="`/items/${selectedChat?.productId}`" class="entity-link modal-link">{{ productMap[selectedChat?.productId] || selectedChat?.title || 'Inquiry' }}</NuxtLink>
             <span v-else>{{ productMap[selectedChat?.productId] || selectedChat?.title || 'Inquiry' }}</span>
-            <small v-if="selectedChat?.shopId" class="modal-sub"> — <NuxtLink :to="`/shops/${selectedChat?.shopId}`" class="entity-link modal-link">{{ shopMap[selectedChat?.shopId] || selectedChat?.shopId }}</NuxtLink></small>
+            <small v-if="selectedChat?.shopId" class="modal-sub"> from <NuxtLink :to="`/shops/${selectedChat?.shopId}`" class="entity-link modal-link">{{ shopMap[selectedChat?.shopId] || selectedChat?.shopId }}</NuxtLink></small>
           </h3>
           <button class="close-btn" @click="closeChatModal">&times;</button>
         </div>
@@ -89,8 +93,8 @@
                 <div v-if="m.imageUrl" class="message-attachment"><img :src="m.imageUrl" alt="photo" /></div>
                 <div v-if="m.videoUrl" class="message-attachment"><video :src="m.videoUrl" controls /></div>
                 <div class="message-actions" v-if="m.senderId === authStore.user?.uid">
-                  <button class="btn-icon" @click="startEditMessage(m)">??</button>
-                  <button class="btn-icon cancel" @click="deleteMessage(m)">???</button>
+                  <button class="btn-icon" @click="startEditMessage(m)">Messages</button>
+                  <button class="btn-icon cancel" @click="deleteMessage(m)">Delete</button>
                 </div>
               </div>
             </div>
@@ -101,11 +105,15 @@
             <div class="attachments" style="display:flex;align-items:center;gap:8px;margin-left:8px;">
               <label class="file-label">
                 <input type="file" accept="image/*" @change="onPhotoChange" :disabled="!!photoFile || sendingMessage" />
-                <span title="Attach photo">??</span>
+                <span title="Attach photo" aria-label="Attach image">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                </span>
               </label>
               <label class="file-label">
                 <input type="file" accept="video/*" @change="onVideoChange" :disabled="!!videoFile || sendingMessage" />
-                <span title="Attach video">??</span>
+                <span title="Attach video" aria-label="Attach video">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3z"/></svg>
+                </span>
               </label>
               <div class="attachment-previews">
                 <div v-if="photoPreview" class="preview small">
@@ -120,7 +128,7 @@
             </div>
             <button class="btn btn-action view" :disabled="sendingMessage || (!messageText.trim() && !photoFile && !videoFile)" @click="sendMessage">
               <span v-if="sendingMessage" class="button-spinner"></span>
-              <span>{{ sendingMessage ? 'Sending…' : 'Send' }}</span>
+              <span>{{ sendingMessage ? 'Sendingï¿½' : 'Send' }}</span>
             </button>
             <button v-if="editingMessage" class="btn btn-action cancel" :disabled="sendingMessage" @click="cancelEdit">Cancel</button>
           </div>
@@ -493,7 +501,6 @@ const deleteMessage = async (m: Message) => {
 .modal-sub { font-size: 13px; color: #64748b; font-weight: 700; margin-left: 8px; }
 .close-btn { background: none; border: none; font-size: 24px; color: #64748b; cursor: pointer; }
 .entity-link { display: inline-flex; align-items: center; gap: 8px; color: #fff; background: linear-gradient(90deg,#6366f1,#8b5cf6); padding: 6px 12px; border-radius: 999px; font-weight: 700; text-decoration: none; transition: transform .18s ease, box-shadow .18s ease, opacity .12s ease; cursor: pointer; box-shadow: 0 6px 18px rgba(99,102,241,0.12); }
-.entity-link::after { content: '?'; font-size: 12px; opacity: 0.95; margin-left: 6px; transform: translateY(-1px); }
 .entity-link:hover { transform: translateY(-3px); box-shadow: 0 14px 36px rgba(99,102,241,0.18); opacity: 0.98; text-decoration: none; }
 .entity-link:active { transform: translateY(0); }
 .entity-link:focus { outline: none; box-shadow: 0 0 0 4px rgba(99,102,241,0.12); }

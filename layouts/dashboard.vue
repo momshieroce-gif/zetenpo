@@ -56,9 +56,9 @@
           <span class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0 2.5-1.12 2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/></svg></span>
           <span>Shops</span>
         </NuxtLink>
-        <NuxtLink to="/dashboard/transactions" class="menu-item">
+        <NuxtLink v-if="canViewShops" to="/dashboard/shop-transactions" class="menu-item">
           <span class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"/></svg></span>
-          <span>Transactions</span>
+          <span>Shop Transactions</span>
         </NuxtLink>
 
         <NuxtLink v-if="canViewUsers" to="/dashboard/users" class="menu-item">
@@ -71,9 +71,14 @@
           <span>Shop Inquiries</span>
         </NuxtLink>
 
+         <NuxtLink to="/dashboard/my-transactions" class="menu-item">
+          <span class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"/></svg></span>
+          <span>My Transactions</span>
+        </NuxtLink>
+
         <NuxtLink to="/dashboard/inquiries" class="menu-item">
           <span class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 9a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-1v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-1H4a1 1 0 0 1-1-1V9Zm2 0v7h14V9H5Zm1 2h2v3H6v-3Zm4 0h2v3H10v-3Zm4 0h2v3h-2v-3Zm4 0h2v3h-2v-3Z" fill="currentColor"/></svg></span>
-          <span>Product Inquiries</span>
+          <span>My Product Inquiries</span>
         </NuxtLink>
 
         <NuxtLink v-if="canViewSubscriptions" to="/dashboard/subscriptions" class="menu-item">

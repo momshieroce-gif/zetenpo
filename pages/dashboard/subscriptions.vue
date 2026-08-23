@@ -19,35 +19,6 @@
     <div v-else class="content-stack">
       <div v-if="fetchError" class="state error">{{ fetchError }}</div>
 
-      <section class="current-card">
-        <div class="current-card-copy">
-          <p class="section-kicker">Current subscription</p>
-          <h2>{{ currentPlan?.name || 'Free Plan' }}</h2>
-          <p>
-            {{ currentPlan?.description || subscriptionPlans[0].description }}
-          </p>
-        </div>
-
-        <div class="current-meta-grid">
-          <div class="meta-card">
-            <span class="meta-label">Plan ID</span>
-            <strong>{{ currentSubscription?.planId || 'free' }}</strong>
-          </div>
-          <div class="meta-card">
-            <span class="meta-label">Status</span>
-            <strong>{{ currentSubscription ? displayStatus(currentSubscription.status) : 'Available' }}</strong>
-          </div>
-          <div class="meta-card">
-            <span class="meta-label">Started</span>
-            <strong>{{ currentSubscription?.startedAt ? formatDate(currentSubscription.startedAt) : 'Not started' }}</strong>
-          </div>
-          <div class="meta-card">
-            <span class="meta-label">Expires</span>
-            <strong>{{ currentSubscription?.expiresAt ? formatDate(currentSubscription.expiresAt) : 'No expiry' }}</strong>
-          </div>
-        </div>
-      </section>
-
       <section class="upgrade-card">
         <div class="upgrade-head">
           <div>
