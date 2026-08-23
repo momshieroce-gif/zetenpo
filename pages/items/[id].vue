@@ -400,7 +400,7 @@ onMounted(fetchData);
 }
 
 .item-name {
-  font-size: 28px;
+  font-size: 20px;
   font-weight: 900;
   margin: 0 0 8px;
 }
@@ -414,7 +414,7 @@ onMounted(fetchData);
 .item-body {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 40px 24px;
+  padding: 20px 5px;
 }
 
 .loading, .empty-state {
@@ -449,7 +449,7 @@ onMounted(fetchData);
   gap: 40px;
   background: #fff;
   border-radius: 20px;
-  padding: 32px;
+  padding: 15px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.06);
 }
 

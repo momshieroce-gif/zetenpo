@@ -192,7 +192,6 @@ onMounted(fetchData);
   text-decoration: none;
   font-weight: 700;
   font-size: 14px;
-  margin-bottom: 16px;
   display: inline-block;
 }
 

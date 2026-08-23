@@ -29,7 +29,7 @@
 
         <div class="header-actions">
           <button class="icon-btn cart-btn" aria-label="Cart" @click="navigateTo('/cart')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zm10 0c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2zM7.82 14l-.76-3.18H3c-1.1 0-2-.9-2-2 0-.56.23-1.06.59-1.42L5.29 5.71l.71-2.12h13l-.65 1.93c.47.28.82.8.82 1.41 0 .94-.76 1.7-1.7 1.7h-.55l-.62 2.62H7.82zM6.16 8h11.15l-1.09-2.5H7.41L6.16 8z" fill="currentColor"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 1.9-1.4L21 8H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="20" r="1.5" fill="currentColor"/><circle cx="18" cy="20" r="1.5" fill="currentColor"/></svg>
             <span v-if="cartCount > 0" class="icon-badge">{{ cartCount }}</span>
           </button>
           <template v-if="!authStore.isLoggedIn">
@@ -167,7 +167,7 @@ onUnmounted(() => { document.removeEventListener('click', onClickOutside); });
 .header { position: fixed; top: 0; left: 0; right: 0; z-index: 50; background: rgba(15, 23, 42, 0.92); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2); height: 72px; }
 .header-inner { display: flex; align-items: center; justify-content: space-between; height: 72px; padding: 0 24px; max-width: 1240px; margin: 0 auto; }
 
-.logo-section { display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit; }
+.logo-section { display: flex; align-items: center; gap: 5px; text-decoration: none; color: inherit; }
 .logo-section:hover { transform: scale(1.02); }
 .logo-container { width: 46px; height: 46px; border-radius: 14px; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); display: flex; align-items: center; justify-content: center; padding: 4px; transition: all 0.3s ease; }
 .logo-section:hover .logo-container { box-shadow: 0 8px 24px rgba(99, 102, 241, 0.25); transform: scale(1.05); }

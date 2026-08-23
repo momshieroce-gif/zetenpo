@@ -8,9 +8,7 @@
       </div>
       <div class="container map-hero-inner">
         <div class="map-hero-left">
-          <div class="map-hero-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#fff"/></svg>
-          </div>
+          
           <div>
             <div class="map-hero-label">Live Map</div>
             <h1 class="map-hero-title">Find Nearby Shops</h1>
@@ -541,7 +539,7 @@ onMounted(() => {
 }
 
 .map-hero-title {
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 900;
   margin: 0 0 8px;
 }
