@@ -897,5 +897,12 @@ onMounted(fetchData);
     justify-content: space-between;
     width: 100%;
   }
+
+}
+
+@media (max-width: 500px) {
+.main-image {
+  height: 250px;
+}
 }
 </style>

@@ -64,7 +64,6 @@ useHead({
           <span>Back to shop</span>
         </NuxtLink>
         <h1 class="cart-title">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zm10 0c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2zM7.82 14l-.76-3.18H3c-1.1 0-2-.9-2-2 0-.56.23-1.06.59-1.42L5.29 5.71l.71-2.12h13l-.65 1.93c.47.28.82.8.82 1.41 0 .94-.76 1.7-1.7 1.7h-.55l-.62 2.62H7.82zM6.16 8h11.15l-1.09-2.5H7.41L6.16 8z" fill="currentColor"/></svg>
           Your Cart
         </h1>
       </div>
@@ -237,7 +236,7 @@ useHead({
 }
 
 .cart-title {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 900;
   margin: 0;
   display: flex;
