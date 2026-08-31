@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { collection, doc, getDoc, getDocs, addDoc, updateDoc, query, where, serverTimestamp } from '~/utils/firestoreLogger';
+import { collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, query, where, serverTimestamp } from '~/utils/firestoreLogger';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import type { Shop, Product } from '~/types';
+import type { Inventory, Product, ProductVariant, Shop } from '~/types';
 
 const route = useRoute();
 const router = useRouter();
@@ -22,6 +22,7 @@ const storage = nuxtApp.$firebase?.storage;
 
 const shop = ref<Shop | null>(null);
 const products = ref<Product[]>([]);
+const inventorySummaryByProductId = ref<Record<string, { quantity: number; availableQuantity: number }>>({});
 const loading = ref(true);
 const fetchError = ref('');
 const saving = ref(false);
@@ -34,8 +35,18 @@ const stockError = ref('');
 const isEditing = ref(false);
 const editingId = ref<string | null>(null);
 const showProductModal = ref(false);
+const showVariantModal = ref(false);
+const variantTargetProduct = ref<Product | null>(null);
+const productVariants = ref<ProductVariant[]>([]);
+const variantInventoryById = ref<Record<string, Inventory>>({});
+const variantsLoading = ref(false);
+const variantSaving = ref(false);
+const variantError = ref('');
 const showStockModal = ref(false);
 const stockTargetProduct = ref<Product | null>(null);
+const stockVariants = ref<ProductVariant[]>([]);
+const stockInventoryByVariantId = ref<Record<string, Inventory>>({});
+const stockVariantsLoading = ref(false);
 const imageFiles = ref<File[]>([]);
 const imagePreviews = ref<{ url: string; name: string }[]>([]);
 const existingImages = ref<string[]>([]);
@@ -50,14 +61,24 @@ const form = reactive({
   description: '',
   price: 0,
   category: '',
-  initialStock: 0,
   isAvailable: true,
 });
 
 const stockForm = reactive({
+  variantId: '',
   movementType: 'in' as 'in' | 'out',
   quantity: 1,
   note: '',
+});
+
+const variantForm = reactive({
+  sku: '',
+  name: '',
+  price: 0,
+  size: '',
+  color: '',
+  quantity: 0,
+  reorderLevel: 10,
 });
 
 const resetForm = () => {
@@ -65,7 +86,6 @@ const resetForm = () => {
   form.description = '';
   form.price = 0;
   form.category = '';
-  form.initialStock = 0;
   form.isAvailable = true;
   isEditing.value = false;
   editingId.value = null;
@@ -82,6 +102,132 @@ const closeProductModal = () => {
   showProductModal.value = false;
   resetForm();
 };
+
+const resetVariantForm = () => {
+  variantForm.sku = '';
+  variantForm.name = variantTargetProduct.value?.name || '';
+  variantForm.price = Number(variantTargetProduct.value?.price || 0);
+  variantForm.size = '';
+  variantForm.color = '';
+  variantForm.quantity = 0;
+  variantForm.reorderLevel = 10;
+  variantError.value = '';
+};
+
+const fetchProductVariants = async (productId: string) => {
+  if (!db) return;
+  variantsLoading.value = true;
+  try {
+    const variantsSnapshot = await getDocs(query(
+      collection(db, 'productVariants'),
+      where('productId', '==', productId)
+    ));
+    productVariants.value = variantsSnapshot.docs.map((variantDoc: any) => ({
+      id: variantDoc.id,
+      ...variantDoc.data(),
+    })) as ProductVariant[];
+
+    const inventoryEntries: Array<readonly [string, Inventory] | null> = await Promise.all(productVariants.value.map(async (variant: ProductVariant) => {
+      const inventorySnapshot = await getDoc(doc(db, 'inventory', variant.id));
+      if (!inventorySnapshot.exists()) return null;
+      const inventoryData = inventorySnapshot.data() as Omit<Inventory, 'id'>;
+      return [variant.id, { id: inventorySnapshot.id, ...inventoryData }] as const;
+    }));
+    variantInventoryById.value = Object.fromEntries(
+      inventoryEntries.filter((entry): entry is readonly [string, Inventory] => entry !== null)
+    ) as Record<string, Inventory>;
+  } finally {
+    variantsLoading.value = false;
+  }
+};
+
+const openVariantModal = async (product: Product) => {
+  variantTargetProduct.value = product;
+  productVariants.value = [];
+  variantInventoryById.value = {};
+  resetVariantForm();
+  showVariantModal.value = true;
+  try {
+    await fetchProductVariants(product.id);
+  } catch (e: any) {
+    variantError.value = e?.message || 'Failed to load product variants.';
+  }
+};
+
+const closeVariantModal = () => {
+  showVariantModal.value = false;
+  variantTargetProduct.value = null;
+  productVariants.value = [];
+  variantInventoryById.value = {};
+  variantError.value = '';
+};
+
+const createProductVariant = async () => {
+  if (!db || !variantTargetProduct.value) return;
+  variantError.value = '';
+
+  const sku = variantForm.sku.trim().toUpperCase();
+  const name = variantForm.name.trim();
+  const size = variantForm.size.trim();
+  const color = variantForm.color.trim();
+  const price = Number(variantForm.price);
+  const quantity = Number(variantForm.quantity);
+  const reorderLevel = Number(variantForm.reorderLevel);
+  if (!sku || !name || !size || !color) {
+    variantError.value = 'SKU, variant name, size, and color are required.';
+    return;
+  }
+  if (![price, quantity, reorderLevel].every(Number.isFinite) || price < 0 || quantity < 0 || reorderLevel < 0) {
+    variantError.value = 'Price, opening quantity, and reorder level must be valid non-negative numbers.';
+    return;
+  }
+
+  variantSaving.value = true;
+  try {
+    const duplicateSkuSnapshot = await getDocs(query(collection(db, 'productVariants'), where('sku', '==', sku)));
+    if (!duplicateSkuSnapshot.empty) {
+      variantError.value = 'This SKU is already assigned to another variant.';
+      return;
+    }
+
+    const variantRef = doc(collection(db, 'productVariants'));
+    await setDoc(variantRef, {
+      productId: variantTargetProduct.value.id,
+      sku,
+      name,
+      price,
+      attributes: { size, color },
+    });
+    await setDoc(doc(db, 'inventory', variantRef.id), {
+      variantId: variantRef.id,
+      sku,
+      quantity,
+      reservedQuantity: 0,
+      availableQuantity: quantity,
+      reorderLevel,
+      updatedAt: serverTimestamp(),
+    });
+    if (quantity > 0) {
+      await addDoc(collection(db, 'inventoryTransactions'), {
+        variantId: variantRef.id,
+        type: 'IN',
+        quantity,
+        referenceType: 'MANUAL',
+        referenceId: variantTargetProduct.value.id,
+        createdAt: serverTimestamp(),
+        createdBy: authStore.user?.uid || '',
+      });
+    }
+
+    await fetchProductVariants(variantTargetProduct.value.id);
+    await fetchInventorySummaries(products.value.map((product: Product) => product.id));
+    resetVariantForm();
+  } catch (e: any) {
+    variantError.value = e?.message || 'Failed to create product variant.';
+  } finally {
+    variantSaving.value = false;
+  }
+};
 const openAddProduct = async () => {
   resetForm();
   const canCreate = await enforceProductLimitForCreate();
@@ -96,7 +242,6 @@ const openEditProduct = (product: Product) => {
   form.description = product.description || '';
   form.price = product.price || 0;
   form.category = product.category || '';
-  form.initialStock = Number(product.initialStock || 0);
   form.isAvailable = product.isAvailable !== false;
   existingImages.value = product.images || [];
   const productDefaultImage = (product as any)?.defaultImage as string | undefined;
@@ -154,24 +299,71 @@ const resolveDefaultImageUrl = (uploadedUrls: string[]) => {
   return existingImages.value[0] || uploadedUrls[0] || '';
 };
 
-const openStockModal = (product: Product) => {
+const openStockModal = async (product: Product) => {
   stockTargetProduct.value = product;
+  stockVariants.value = [];
+  stockInventoryByVariantId.value = {};
+  stockForm.variantId = '';
   stockForm.movementType = 'in';
   stockForm.quantity = 1;
   stockForm.note = '';
   stockError.value = '';
   showStockModal.value = true;
+
+  if (!db) return;
+  stockVariantsLoading.value = true;
+  try {
+    const variantsSnapshot = await getDocs(query(
+      collection(db, 'productVariants'),
+      where('productId', '==', product.id)
+    ));
+    stockVariants.value = variantsSnapshot.docs.map((variantDoc: any) => ({
+      id: variantDoc.id,
+      ...variantDoc.data(),
+    })) as ProductVariant[];
+
+    const inventoryEntries: Array<readonly [string, Inventory] | null> = await Promise.all(stockVariants.value.map(async (variant: ProductVariant) => {
+      const inventorySnapshot = await getDoc(doc(db, 'inventory', variant.id));
+      if (!inventorySnapshot.exists()) return null;
+      const inventoryData = inventorySnapshot.data() as Omit<Inventory, 'id'>;
+      return [variant.id, { id: inventorySnapshot.id, ...inventoryData }] as const;
+    }));
+    const availableInventoryEntries = inventoryEntries.filter(
+      (entry): entry is readonly [string, Inventory] => entry !== null
+    );
+    stockInventoryByVariantId.value = Object.fromEntries(
+      availableInventoryEntries
+    ) as Record<string, Inventory>;
+    stockForm.variantId = stockVariants.value[0]?.id || '';
+    if (!stockVariants.value.length) {
+      stockError.value = 'This product has no variants. Add a product variant before adjusting inventory.';
+    }
+  } catch (e: any) {
+    stockError.value = e?.message || 'Failed to load product variants.';
+  } finally {
+    stockVariantsLoading.value = false;
+  }
 };
 
 const closeStockModal = () => {
   showStockModal.value = false;
   stockTargetProduct.value = null;
+  stockVariants.value = [];
+  stockInventoryByVariantId.value = {};
+  stockForm.variantId = '';
   stockError.value = '';
 };
 
+const selectedStockVariant = computed(() => {
+  return stockVariants.value.find((variant: ProductVariant) => variant.id === stockForm.variantId) || null;
+});
+
+const selectedStockInventory = computed(() => {
+  return stockForm.variantId ? stockInventoryByVariantId.value[stockForm.variantId] || null : null;
+});
+
 const stockBaseValue = computed(() => {
-  const p = stockTargetProduct.value as any;
-  return Number(p?.currentStock ?? p?.initialStock ?? 0);
+  return Number(selectedStockInventory.value?.availableQuantity || 0);
 });
 
 const stockProjectedValue = computed(() => {
@@ -183,6 +375,10 @@ const applyStockMovement = async () => {
   if (!db || !stockTargetProduct.value) return;
 
   stockError.value = '';
+  if (!selectedStockVariant.value || !selectedStockInventory.value) {
+    stockError.value = 'Select a variant with an inventory record.';
+    return;
+  }
   const quantity = Number(stockForm.quantity);
   if (!Number.isFinite(quantity) || quantity <= 0) {
     stockError.value = 'Quantity must be greater than 0.';
@@ -191,41 +387,50 @@ const applyStockMovement = async () => {
 
   stockSaving.value = true;
   try {
-    const productRef = doc(db, 'products', stockTargetProduct.value.id);
-    const productSnap = await getDoc(productRef);
-    if (!productSnap.exists()) {
-      stockError.value = 'Product not found.';
+    const inventoryRef = doc(db, 'inventory', selectedStockVariant.value.id);
+    const inventorySnapshot = await getDoc(inventoryRef);
+    if (!inventorySnapshot.exists()) {
+      stockError.value = 'Inventory record not found for this variant.';
       return;
     }
 
-    const productData = productSnap.data() as any;
-    const previousStock = Number(productData?.currentStock ?? productData?.initialStock ?? 0);
+    const inventoryData = inventorySnapshot.data() as Omit<Inventory, 'id'>;
+    const previousQuantity = Number(inventoryData.quantity || 0);
+    const reservedQuantity = Number(inventoryData.reservedQuantity || 0);
+    const previousAvailableQuantity = Number(inventoryData.availableQuantity ?? previousQuantity - reservedQuantity);
     const adjustment = stockForm.movementType === 'in' ? quantity : -quantity;
-    const newStock = previousStock + adjustment;
+    const newQuantity = previousQuantity + adjustment;
+    const newAvailableQuantity = previousAvailableQuantity + adjustment;
 
-    if (newStock < 0) {
-      stockError.value = 'Stock out cannot make current stock below 0.';
+    if (newQuantity < reservedQuantity || newAvailableQuantity < 0) {
+      stockError.value = 'Stock out cannot reduce available inventory below 0 or reserved inventory.';
       return;
     }
 
-    await addDoc(collection(db, 'productStocks'), {
-      productId: stockTargetProduct.value.id,
-      productName: productData?.name || stockTargetProduct.value.name || '',
-      shopId: shopId.value,
-      movementType: stockForm.movementType,
-      quantity,
-      previousStock,
-      newStock,
-      note: stockForm.note.trim() || null,
-      createdByUid: authStore.user?.uid || null,
-      createdByName: authStore.user?.displayName || authStore.user?.email || null,
-      createdAt: serverTimestamp(),
+    await updateDoc(inventoryRef, {
+      quantity: newQuantity,
+      availableQuantity: newAvailableQuantity,
       updatedAt: serverTimestamp(),
-      deletedAt: null,
     });
 
-    await updateDoc(productRef, {
-      currentStock: newStock,
+    await addDoc(collection(db, 'inventoryTransactions'), {
+      variantId: selectedStockVariant.value.id,
+      type: stockForm.movementType === 'in' ? 'IN' : 'OUT',
+      quantity,
+      referenceType: 'MANUAL',
+      referenceId: stockTargetProduct.value.id,
+      note: stockForm.note.trim() || null,
+      createdBy: authStore.user?.uid || '',
+      createdAt: serverTimestamp(),
+    });
+
+    const aggregateAvailableQuantity = Object.entries(stockInventoryByVariantId.value as Record<string, Inventory>).reduce((sum, [variantId, inventory]) => {
+      return sum + (variantId === selectedStockVariant.value?.id
+        ? newAvailableQuantity
+        : Number(inventory.availableQuantity || 0));
+    }, 0);
+    await updateDoc(doc(db, 'products', stockTargetProduct.value.id), {
+      currentStock: aggregateAvailableQuantity,
       updatedAt: serverTimestamp(),
     });
 
@@ -258,6 +463,40 @@ const timestampToMillis = (v: any) => {
   return 0;
 };
 
+const fetchInventorySummaries = async (productIds: string[]) => {
+  if (!db || !productIds.length) {
+    inventorySummaryByProductId.value = {};
+    return;
+  }
+
+  const variantSnapshots = await Promise.all(productIds.map((productId) => {
+    return getDocs(query(collection(db, 'productVariants'), where('productId', '==', productId)));
+  }));
+  const variants = variantSnapshots.flatMap((snapshot: any) => {
+    return snapshot.docs.map((variantDoc: any) => ({
+      id: variantDoc.id,
+      productId: variantDoc.data().productId as string,
+    }));
+  });
+  const inventoryEntries = await Promise.all(variants.map(async (variant) => {
+    const inventorySnapshot = await getDoc(doc(db, 'inventory', variant.id));
+    if (!inventorySnapshot.exists()) return null;
+    const inventory = inventorySnapshot.data() as Omit<Inventory, 'id'>;
+    return { productId: variant.productId, inventory };
+  }));
+
+  const summaries = Object.fromEntries(productIds.map((productId) => [productId, {
+    quantity: 0,
+    availableQuantity: 0,
+  }])) as Record<string, { quantity: number; availableQuantity: number }>;
+  inventoryEntries.forEach((entry) => {
+    if (!entry) return;
+    summaries[entry.productId].quantity += Number(entry.inventory.quantity || 0);
+    summaries[entry.productId].availableQuantity += Number(entry.inventory.availableQuantity || 0);
+  });
+  inventorySummaryByProductId.value = summaries;
+};
+
 const fetchProducts = async () => {
   if (!db) return;
   loading.value = true;
@@ -265,10 +504,12 @@ const fetchProducts = async () => {
   try {
     const q = query(collection(db, 'products'), where('shopId', '==', shopId.value));
     const snap = await getDocs(q);
-    products.value = snap.docs
+    const fetchedProducts = snap.docs
       .map((d: any) => ({ id: d.id, ...d.data() } as Product))
       .filter((p: Product) => !p.deletedAt)
       .sort((a: Product, b: Product) => timestampToMillis(b.createdAt) - timestampToMillis(a.createdAt));
+    products.value = fetchedProducts;
+    await fetchInventorySummaries(fetchedProducts.map((product: Product) => product.id));
   } catch (e: any) {
     fetchError.value = e?.message || 'Failed to load products.';
   } finally {
@@ -379,10 +620,6 @@ const saveProduct = async () => {
     formError.value = 'Product name is required.';
     return;
   }
-  if ((Number(form.initialStock) || 0) < 0) {
-    formError.value = 'Initial stock cannot be negative.';
-    return;
-  }
   if (!db) return;
   saving.value = true;
   try {
@@ -407,7 +644,6 @@ const saveProduct = async () => {
       description: form.description.trim(),
       price: Number(form.price) || 0,
       category: form.category.trim(),
-      initialStock: Number(form.initialStock) || 0,
       isAvailable: form.isAvailable,
       images,
       defaultImage,
@@ -422,7 +658,7 @@ const saveProduct = async () => {
         shopName: shop.value?.name || '',
         latitude: shop.value?.latitude,
         longitude: shop.value?.longitude,
-        currentStock: Number(form.initialStock) || 0,
+        currentStock: 0,
         deletedAt: null,
         createdAt: serverTimestamp(),
       });
@@ -494,10 +730,6 @@ onMounted(() => {
               <label>Category</label>
               <input v-model="form.category" type="text" class="input" placeholder="Category" />
             </div>
-            <div class="field">
-              <label>Initial Stock</label>
-              <input v-model.number="form.initialStock" type="number" min="0" step="1" class="input" placeholder="0" />
-            </div>
             <div class="field full">
               <label>Description</label>
               <textarea v-model="form.description" class="input" rows="2" placeholder="Description"></textarea>
@@ -538,6 +770,92 @@ onMounted(() => {
       </div>
     </div>
 
+    <div v-if="showVariantModal" class="modal-overlay" @click.self="closeVariantModal">
+      <div class="modal-card variant-modal-card">
+        <div class="modal-header">
+          <div>
+            <h3>Manage Product Variants</h3>
+            <div class="modal-subtitle">{{ variantTargetProduct?.name || '-' }}</div>
+          </div>
+          <button class="close-btn" @click="closeVariantModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="variant-section-heading">
+            <span>Existing Variants</span>
+            <span class="variant-count">{{ productVariants.length }}</span>
+          </div>
+          <div v-if="variantsLoading" class="variant-empty">Loading variants...</div>
+          <div v-else-if="!productVariants.length" class="variant-empty">No variants yet. Create the first variant below.</div>
+          <div v-else class="variant-table-wrap">
+            <table class="variant-table">
+              <thead>
+                <tr>
+                  <th>Variant</th>
+                  <th>SKU</th>
+                  <th>Price</th>
+                  <th>Quantity</th>
+                  <th>Available</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="variant in productVariants" :key="variant.id">
+                  <td>
+                    <div class="variant-name">{{ variant.attributes.size }} / {{ variant.attributes.color }}</div>
+                    <div class="variant-description">{{ variant.name }}</div>
+                  </td>
+                  <td><span class="variant-sku">{{ variant.sku }}</span></td>
+                  <td>₱{{ Number(variant.price || 0).toFixed(2) }}</td>
+                  <td>{{ variantInventoryById[variant.id]?.quantity ?? 0 }}</td>
+                  <td>{{ variantInventoryById[variant.id]?.availableQuantity ?? 0 }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="variant-form-divider"></div>
+          <div class="variant-section-heading">Create Variant</div>
+          <div class="form-grid variant-form-grid">
+            <div class="field">
+              <label>SKU</label>
+              <input v-model="variantForm.sku" type="text" class="input" placeholder="MNS-SHIRT-BLK-M" />
+            </div>
+            <div class="field">
+              <label>Variant Name</label>
+              <input v-model="variantForm.name" type="text" class="input" placeholder="Product variant name" />
+            </div>
+            <div class="field">
+              <label>Size</label>
+              <input v-model="variantForm.size" type="text" class="input" placeholder="Medium" />
+            </div>
+            <div class="field">
+              <label>Color</label>
+              <input v-model="variantForm.color" type="text" class="input" placeholder="Black" />
+            </div>
+            <div class="field">
+              <label>Price</label>
+              <input v-model.number="variantForm.price" type="number" min="0" step="0.01" class="input" placeholder="0.00" />
+            </div>
+            <div class="field">
+              <label>Opening Quantity</label>
+              <input v-model.number="variantForm.quantity" type="number" min="0" step="1" class="input" placeholder="0" />
+            </div>
+            <div class="field full">
+              <label>Reorder Level</label>
+              <input v-model.number="variantForm.reorderLevel" type="number" min="0" step="1" class="input" placeholder="10" />
+            </div>
+          </div>
+          <div v-if="variantError" class="error">{{ variantError }}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" @click="closeVariantModal">Close</button>
+          <button class="btn btn-primary" :disabled="variantSaving" @click="createProductVariant">
+            <span v-if="variantSaving">Creating...</span>
+            <span v-else>Create Variant</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="loading" class="state loading">Loading products...</div>
     <div v-else-if="fetchError" class="state error">{{ fetchError }}</div>
     <div v-else-if="!products.length" class="state empty">No products yet.</div>
@@ -549,8 +867,7 @@ onMounted(() => {
             <tr>
               <th>Product</th>
               <th>Price</th>
-              <th>Initial Stock</th>
-              <th>Current Stock</th>
+              <th>Inventory Quantity</th>
               <th>Availability</th>
               <th class="actions">Actions</th>
             </tr>
@@ -562,8 +879,7 @@ onMounted(() => {
                 <div class="product-desc">{{ p.description || '-' }}</div>
               </td>
               <td data-label="Price">₱{{ (p.price || 0).toFixed(2) }}</td>
-              <td data-label="Initial Stock">{{ Number(p.initialStock || 0) }}</td>
-              <td data-label="Current Stock">{{ Number((p as any).currentStock ?? p.initialStock ?? 0) }}</td>
+              <td data-label="Inventory Quantity">{{ inventorySummaryByProductId[p.id]?.quantity ?? 0 }}</td>
               <td data-label="Availability">
                 <span class="badge" :class="p.isAvailable ? 'badge-success' : 'badge-inactive'">
                   <span class="dot"></span>
@@ -571,7 +887,8 @@ onMounted(() => {
                 </span>
               </td>
               <td data-label="Actions" class="actions">
-                <button class="btn-stock" @click="openStockModal(p)">Add Stocks</button>
+                <button class="btn-variants" @click="openVariantModal(p)">Variants</button>
+                <button class="btn-stock" @click="openStockModal(p)">Stocks</button>
                 <button class="btn-icon edit" @click="openEditProduct(p)" title="Edit">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>
@@ -612,6 +929,19 @@ onMounted(() => {
           </div>
 
           <div class="form-grid stock-form-grid">
+            <div class="field full">
+              <label>Product Variant</label>
+              <select v-model="stockForm.variantId" class="input" :disabled="stockVariantsLoading || !stockVariants.length">
+                <option value="" disabled>{{ stockVariantsLoading ? 'Loading variants...' : 'Select a variant' }}</option>
+                <option v-for="variant in stockVariants" :key="variant.id" :value="variant.id">
+                  {{ variant.attributes.size }} / {{ variant.attributes.color }} - {{ variant.sku }}
+                </option>
+              </select>
+              <div v-if="selectedStockVariant" class="selected-variant-meta">
+                <span>{{ selectedStockVariant.name }}</span>
+                <span class="variant-sku">{{ selectedStockVariant.sku }}</span>
+              </div>
+            </div>
             <div class="field">
               <label>Movement Type</label>
               <select v-model="stockForm.movementType" class="input">
@@ -633,7 +963,7 @@ onMounted(() => {
         </div>
         <div class="modal-footer">
           <button class="btn btn-ghost" @click="closeStockModal">Cancel</button>
-          <button class="btn btn-primary" :disabled="stockSaving" @click="applyStockMovement">
+          <button class="btn btn-primary" :disabled="stockSaving || stockVariantsLoading || !selectedStockInventory" @click="applyStockMovement">
             <span v-if="stockSaving">Saving...</span>
             <span v-else>Save Stock Movement</span>
           </button>
@@ -678,8 +1008,10 @@ textarea.input { resize: vertical; min-height: 64px; }
 .product-meta { font-size: 13px; color: #64748b; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .product-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .product-actions .btn-icon { margin-left: 0; }
-.btn-stock { height: 36px; border-radius: 10px; border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; font-weight: 700; font-size: 12px; padding: 0 10px; cursor: pointer; transition: all 0.2s; }
-.btn-stock:hover { background: #e0e7ff; border-color: #a5b4fc; }
+.btn-stock { margin-left: 5px; height: 36px; border-radius: 10px; border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; font-weight: 700; font-size: 12px; padding: 0 10px; cursor: pointer; transition: all 0.2s; }
+.btn-stock:hover { margin-left: 5px; background: #e0e7ff; border-color: #a5b4fc; }
+.btn-variants { height: 36px; border-radius: 10px; border: 1px solid #99f6e4; background: #f0fdfa; color: #0f766e; font-weight: 700; font-size: 12px; padding: 0 10px; cursor: pointer; transition: all 0.2s; }
+.btn-variants:hover { background: #ccfbf1; border-color: #5eead4; }
 .pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 .pagination-info { font-size: 13px; font-weight: 700; color: #475569; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; font-weight: 700; font-size: 14px; border: none; cursor: pointer; transition: all 0.2s; }
@@ -758,11 +1090,25 @@ textarea.input { resize: vertical; min-height: 64px; }
 .modal-card { background: #fff; border-radius: 20px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 60px rgba(15,23,42,0.25); }
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #f1f5f9; }
 .modal-header h3 { margin: 0; font-size: 18px; font-weight: 900; color: #0f172a; }
+.modal-subtitle { margin-top: 3px; color: #64748b; font-size: 12px; font-weight: 600; }
 .close-btn { background: none; border: none; font-size: 28px; line-height: 1; color: #94a3b8; cursor: pointer; }
 .close-btn:hover { color: #0f172a; }
 .modal-body { padding: 24px; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 24px; border-top: 1px solid #f1f5f9; background: #f8fafc; border-radius: 0 0 20px 20px; }
 .stock-modal-card { max-width: 620px; }
+.variant-modal-card { max-width: 820px; }
+.variant-section-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: #0f172a; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; }
+.variant-count { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 999px; background: #ccfbf1; color: #0f766e; font-size: 11px; }
+.variant-empty { padding: 24px; border: 1px dashed #cbd5e1; border-radius: 10px; background: #f8fafc; color: #64748b; text-align: center; font-size: 13px; font-weight: 600; }
+.variant-table-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
+.variant-table { width: 100%; border-collapse: collapse; }
+.variant-table th { padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 10px; font-weight: 900; text-align: left; text-transform: uppercase; }
+.variant-table td { padding: 11px 12px; border-bottom: 1px solid #f1f5f9; color: #0f172a; font-size: 13px; }
+.variant-table tbody tr:last-child td { border-bottom: none; }
+.variant-name { font-weight: 800; }
+.variant-description { margin-top: 2px; color: #64748b; font-size: 11px; }
+.variant-form-divider { height: 1px; margin: 24px 0; background: #e2e8f0; }
+.variant-form-grid { gap: 14px; }
 .stock-summary { background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 1px solid #fde68a; border-radius: 14px; padding: 14px; margin-bottom: 14px; }
 .stock-name { font-size: 15px; font-weight: 900; color: #78350f; margin-bottom: 10px; }
 .stock-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -771,6 +1117,8 @@ textarea.input { resize: vertical; min-height: 64px; }
 .stock-value.ok { color: #166534; }
 .stock-value.danger { color: #dc2626; }
 .stock-form-grid { margin-top: 6px; }
+.selected-variant-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #64748b; font-size: 12px; }
+.variant-sku { padding: 3px 7px; border-radius: 5px; background: #eef2ff; color: #4338ca; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-weight: 800; white-space: nowrap; }
 .table-wrap { width: 100%; overflow-x: auto; }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th, .data-table td { padding: 16px 20px; text-align: left; font-size: 14px; border-bottom: 1px solid #f1f5f9; }

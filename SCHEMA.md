@@ -87,6 +87,58 @@ interface Product {
 }
 ```
 
+## `productVariants`
+
+Sellable variants belonging to a product. The document ID is the variant ID.
+
+```ts
+interface ProductVariant {
+  id: string;                         // Firestore document ID
+  productId: string;                  // Reference to /products/{productId}
+  sku: string;                        // Unique stock-keeping unit
+  name: string;
+  price: number;
+  attributes: {
+    size: string;
+    color: string;
+  };
+}
+```
+
+## `inventory`
+
+Current inventory state for each variant. The document ID must match `variantId`, allowing direct lookup at `/inventory/{variantId}`. `availableQuantity` is maintained as `quantity - reservedQuantity`.
+
+```ts
+interface Inventory {
+  id: string;                         // Same value as variantId
+  variantId: string;                  // Reference to /productVariants/{variantId}
+  sku: string;
+  quantity: number;
+  reservedQuantity: number;
+  availableQuantity: number;
+  reorderLevel: number;
+  updatedAt: Timestamp;
+}
+```
+
+## `inventoryTransactions`
+
+Append-only inventory movement history. Positive `quantity` values are used with the movement `type` to determine direction.
+
+```ts
+interface InventoryTransaction {
+  id: string;                         // Firestore document ID
+  variantId: string;                  // Reference to /productVariants/{variantId}
+  type: 'IN' | 'OUT' | 'ADJUSTMENT' | 'RETURN';
+  quantity: number;
+  referenceType: 'PURCHASE' | 'SALE' | 'RETURN' | 'MANUAL';
+  referenceId: string;
+  createdAt: Timestamp;
+  createdBy: string;                  // Reference to /users/{userId}
+}
+```
+
 ## `chats`
 
 Chat threads between a customer and a shop about a specific product.

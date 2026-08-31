@@ -436,6 +436,10 @@ const processOrder = async () => {
       const qty = item.qty;
       return {
         product_id: item.product.id,
+        variant_id: item.product.selectedVariantId || null,
+        variant_sku: item.product.selectedVariantSku || null,
+        variant_name: item.product.selectedVariantName || null,
+        variant_attributes: item.product.selectedVariantAttributes || null,
         shop_id: item.product.shopId,
         name: item.product.name,
         price,

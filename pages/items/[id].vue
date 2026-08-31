@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where } from '~/utils/firestoreLogger';
-import type { Product, Shop } from '~/types';
+import type { Inventory, Product, ProductVariant, Shop } from '~/types';
 
 const route = useRoute();
 const router = useRouter();
@@ -15,6 +15,9 @@ const selectedImage = ref(0);
 const { cart, addToCart } = useCart();
 const added = ref(false);
 const inquiryLoading = ref(false);
+const variants = ref<ProductVariant[]>([]);
+const inventoryByVariantId = ref<Record<string, Inventory>>({});
+const selectedVariantId = ref('');
 
 type ProductFeedback = {
   id: string;
@@ -37,13 +40,35 @@ const fetchData = async () => {
 
   const productDoc = await getDoc(doc(db, 'products', productId));
   if (productDoc.exists()) {
-    product.value = { id: productDoc.id, ...productDoc.data() } as Product;
+    const productData = productDoc.data() as Omit<Product, 'id'>;
+    product.value = { id: productDoc.id, ...productData };
     if (product.value?.shopId) {
       const shopDoc = await getDoc(doc(db, 'shops', product.value.shopId));
       if (shopDoc.exists()) {
-        shop.value = { id: shopDoc.id, ...shopDoc.data() } as Shop;
+        const shopData = shopDoc.data() as Omit<Shop, 'id'>;
+        shop.value = { id: shopDoc.id, ...shopData };
       }
     }
+    const variantsQuery = query(collection(db, 'productVariants'), where('productId', '==', productId));
+    const variantsSnapshot = await getDocs(variantsQuery);
+    variants.value = variantsSnapshot.docs.map((variantDoc: any) => ({
+      id: variantDoc.id,
+      ...variantDoc.data(),
+    })) as ProductVariant[];
+
+    const inventoryEntries: Array<readonly [string, Inventory] | null> = await Promise.all(variants.value.map(async (variant: ProductVariant) => {
+      const inventoryDoc = await getDoc(doc(db, 'inventory', variant.id));
+      if (!inventoryDoc.exists()) return null;
+      const inventoryData = inventoryDoc.data() as Omit<Inventory, 'id'>;
+      return [variant.id, { id: inventoryDoc.id, ...inventoryData }] as const;
+    }));
+    const availableInventoryEntries = inventoryEntries.filter((entry): entry is readonly [string, Inventory] => entry !== null);
+    inventoryByVariantId.value = Object.fromEntries(availableInventoryEntries);
+    const requestedVariantId = typeof route.query.variant === 'string' ? route.query.variant : '';
+    const requestedVariant = variants.value.find((variant: ProductVariant) => variant.id === requestedVariantId);
+    selectedVariantId.value = requestedVariant?.id || variants.value.find((variant: ProductVariant) => {
+      return Number(inventoryByVariantId.value[variant.id]?.availableQuantity || 0) > 0;
+    })?.id || variants.value[0]?.id || '';
     await fetchFeedbacks();
   }
   loading.value = false;
@@ -51,14 +76,34 @@ const fetchData = async () => {
 
 const showMultiShopModal = ref(false);
 
+const selectedVariant = computed(() => variants.value.find((variant: ProductVariant) => variant.id === selectedVariantId.value) || null);
+const selectedInventory = computed(() => selectedVariant.value ? inventoryByVariantId.value[selectedVariant.value.id] : null);
+const displayedPrice = computed(() => Number(selectedVariant.value?.price ?? product.value?.price ?? 0));
+const availableQuantity = computed(() => {
+  if (selectedInventory.value) return Number(selectedInventory.value.availableQuantity || 0);
+  return Number(product.value?.currentStock ?? product.value?.initialStock ?? 0);
+});
+const canAddToCart = computed(() => {
+  if (!product.value) return false;
+  if (variants.value.length && !selectedVariant.value) return false;
+  return availableQuantity.value > 0;
+});
+
 const handleAddToCart = () => {
-  if (!product.value) return;
+  if (!product.value || !canAddToCart.value) return;
   const cartShopId = cart.value.length ? cart.value[0].product.shopId : null;
   if (cartShopId && cartShopId !== product.value.shopId) {
     showMultiShopModal.value = true;
     return;
   }
-  addToCart(product.value);
+  addToCart({
+    ...product.value,
+    price: displayedPrice.value,
+    selectedVariantId: selectedVariant.value?.id,
+    selectedVariantSku: selectedVariant.value?.sku,
+    selectedVariantName: selectedVariant.value?.name,
+    selectedVariantAttributes: selectedVariant.value?.attributes,
+  });
   added.value = true;
   setTimeout(() => (added.value = false), 1500);
 };
@@ -222,8 +267,30 @@ onMounted(fetchData);
 
           <div class="item-info">
             <div class="item-category" v-if="product.category">{{ product.category }}</div>
-            <div class="item-price">₱{{ Number(product.price).toFixed(2) }}</div>
-            <div v-if="product.stock !== undefined" class="item-stock" :class="{ low: product.stock <= 5 }">{{ product.stock }} in stock</div>
+            <div class="item-price">₱{{ displayedPrice.toFixed(2) }}</div>
+            <div class="item-stock" :class="{ low: availableQuantity <= 5 }">
+              {{ availableQuantity > 0 ? `${availableQuantity} in stock` : 'Out of stock' }}
+            </div>
+
+            <div v-if="variants.length" class="variant-picker">
+              <div class="variant-heading">Choose a variant</div>
+              <div class="variant-options" role="radiogroup" aria-label="Product variant">
+                <button
+                  v-for="variant in variants"
+                  :key="variant.id"
+                  type="button"
+                  class="variant-option"
+                  :class="{ active: selectedVariantId === variant.id, unavailable: Number(inventoryByVariantId[variant.id]?.availableQuantity || 0) <= 0 }"
+                  :aria-checked="selectedVariantId === variant.id"
+                  role="radio"
+                  @click="selectedVariantId = variant.id"
+                >
+                  <span class="variant-attributes">{{ variant.attributes.size }} / {{ variant.attributes.color }}</span>
+                  <span class="variant-price">₱{{ Number(variant.price).toFixed(2) }}</span>
+                </button>
+              </div>
+              <div v-if="selectedVariant" class="variant-meta">SKU: {{ selectedVariant.sku }}</div>
+            </div>
 
             <div class="item-desc">
               <h3>Description</h3>
@@ -235,8 +302,8 @@ onMounted(fetchData);
             </div>
 
             <div class="item-actions">
-              <button class="add-to-cart" @click="handleAddToCart">
-                <span v-if="!added">Add to Cart</span>
+              <button class="add-to-cart" :disabled="!canAddToCart" @click="handleAddToCart">
+                <span v-if="!added">{{ availableQuantity > 0 ? 'Add to Cart' : 'Out of Stock' }}</span>
                 <span v-else>Added!</span>
               </button>
               <button class="inquire-btn" @click="handleInquire" :disabled="inquiryLoading">
@@ -539,6 +606,59 @@ onMounted(fetchData);
   color: #ef4444;
 }
 
+.variant-picker {
+  display: grid;
+  gap: 10px;
+}
+
+.variant-heading {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.variant-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.variant-option {
+  min-height: 62px;
+  padding: 10px 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  cursor: pointer;
+  display: grid;
+  gap: 5px;
+  text-align: left;
+}
+
+.variant-option:hover,
+.variant-option.active {
+  border-color: #6d28d9;
+  background: #f5f3ff;
+}
+
+.variant-option.unavailable {
+  color: #9ca3af;
+  background: #f9fafb;
+}
+
+.variant-attributes {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.variant-price,
+.variant-meta {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .item-desc h3 {
   font-size: 16px;
   font-weight: 800;
@@ -600,6 +720,13 @@ onMounted(fetchData);
   .add-to-cart:hover {
     transform: translateY(-2px);
     box-shadow: 0 10px 24px rgba(251, 191, 36, 0.35);
+  }
+
+  .add-to-cart:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
   }
 
   .inquire-btn {

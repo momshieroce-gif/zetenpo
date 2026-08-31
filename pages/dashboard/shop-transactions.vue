@@ -12,13 +12,35 @@
       </div>
     </div>
 
+    <div class="filters-bar">
+      <div class="filter-field">
+        <label for="store-filter">Store</label>
+        <select id="store-filter" v-model="storeFilter" class="filter-control">
+          <option value="">All stores</option>
+          <option v-for="store in storeOptions" :key="store.id" :value="store.id">{{ store.name }}</option>
+        </select>
+      </div>
+      <div class="filter-field">
+        <label for="status-filter">Status</label>
+        <select id="status-filter" v-model="statusFilter" class="filter-control">
+          <option value="">All statuses</option>
+          <option v-for="status in statusOptions" :key="status.slug" :value="status.slug">{{ status.name }}</option>
+        </select>
+      </div>
+      <div class="filter-field">
+        <label for="date-filter">Date</label>
+        <input id="date-filter" v-model="dateFilter" type="date" class="filter-control" />
+      </div>
+      <button v-if="hasActiveFilters" type="button" class="clear-filters" @click="clearFilters">Clear filters</button>
+    </div>
+
     <div class="card">
       <div v-if="loading" class="state loading">
         <div class="spinner"></div>
         <p>Loading transactions...</p>
       </div>
       <div v-else-if="fetchError" class="state error">{{ fetchError }}</div>
-      <template v-else-if="transactions.length">
+      <template v-else-if="filteredTransactions.length">
         <table class="data-table">
           <thead>
             <tr>
@@ -76,8 +98,8 @@
         <div class="empty-icon">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 15h0M7 11h0M7 7h0M12 15h6M12 11h6M12 7h6"/></svg>
         </div>
-        <p class="empty-title">No transactions yet</p>
-        <p class="empty-desc">Orders will appear here once customers start checking out.</p>
+        <p class="empty-title">{{ transactions.length ? 'No matching transactions' : 'No transactions yet' }}</p>
+        <p class="empty-desc">{{ transactions.length ? 'Try changing or clearing the selected filters.' : 'Orders will appear here once customers start checking out.' }}</p>
       </div>
     </div>
 
@@ -300,6 +322,9 @@ const transactions = ref<Transaction[]>([]);
 const loading = ref(true);
 const fetchError = ref('');
 const shopMap = ref<Record<string, string>>({});
+const storeFilter = ref('');
+const statusFilter = ref('');
+const dateFilter = ref('');
 
 const userLat = ref<number | null>(null);
 const userLng = ref<number | null>(null);
@@ -314,10 +339,50 @@ const getUserLocation = () => {
 
 const perPage = 20;
 const currentPage = ref(1);
-const totalPages = computed(() => Math.ceil(transactions.value.length / perPage) || 1);
+const toLocalDateKey = (value: any) => {
+  const date = toDate(value);
+  if (!date) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+const storeOptions = computed(() => {
+  const storeIds = [...new Set(transactions.value.map((transaction: Transaction) => transaction.store_id).filter(Boolean))] as string[];
+  return storeIds
+    .map((id) => ({ id, name: shopMap.value[id] || id }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+});
+const statusOptions = computed(() => {
+  const configured = statusList.value.map((status: any) => ({
+    slug: String(status.slug || ''),
+    name: String(status.name || displayStatus(status.slug)),
+  })).filter((status: { slug: string }) => status.slug);
+  if (configured.length) return configured;
+
+  const statuses = [...new Set<string>(transactions.value.map((transaction: Transaction) => transaction.status || 'pending'))];
+  return statuses.map((slug: string) => ({ slug, name: displayStatus(slug) }));
+});
+const filteredTransactions = computed(() => transactions.value.filter((transaction: Transaction) => {
+  if (storeFilter.value && transaction.store_id !== storeFilter.value) return false;
+  if (statusFilter.value && (transaction.status || 'pending') !== statusFilter.value) return false;
+  if (dateFilter.value && toLocalDateKey(transaction.createdAt) !== dateFilter.value) return false;
+  return true;
+}));
+const hasActiveFilters = computed(() => Boolean(storeFilter.value || statusFilter.value || dateFilter.value));
+const clearFilters = () => {
+  storeFilter.value = '';
+  statusFilter.value = '';
+  dateFilter.value = '';
+};
+const totalPages = computed(() => Math.ceil(filteredTransactions.value.length / perPage) || 1);
 const paginatedTransactions = computed(() => {
   const start = (currentPage.value - 1) * perPage;
-  return transactions.value.slice(start, start + perPage);
+  return filteredTransactions.value.slice(start, start + perPage);
+});
+
+watch([storeFilter, statusFilter, dateFilter], () => {
+  currentPage.value = 1;
 });
 
 const nextPage = () => {
@@ -635,6 +700,13 @@ onMounted(() => {
 .header-icon { width: 52px; height: 52px; border-radius: 14px; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 24px rgba(79,70,229,0.25); }
 .page-title { font-size: 28px; font-weight: 900; margin: 0 0 4px; color: #0f172a; }
 .page-subtitle { font-size: 14px; color: #64748b; margin: 0; }
+.filters-bar { display: grid; grid-template-columns: repeat(3, minmax(160px, 1fr)) auto; align-items: end; gap: 12px; margin-bottom: 16px; padding: 16px; background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 6px 20px rgba(15,23,42,0.04); }
+.filter-field { display: grid; gap: 6px; }
+.filter-field label { color: #475569; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+.filter-control { width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #0f172a; font-size: 13px; font-weight: 600; outline: none; }
+.filter-control:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.12); }
+.clear-filters { min-height: 40px; padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; color: #475569; font-size: 12px; font-weight: 800; cursor: pointer; }
+.clear-filters:hover { background: #f1f5f9; color: #0f172a; }
 .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 20px; padding: 0; box-shadow: 0 10px 40px rgba(15,23,42,0.05); overflow: hidden; }
 .state { padding: 48px; text-align: center; color: #64748b; }
 .state p { margin: 8px 0 0; }
@@ -734,6 +806,7 @@ onMounted(() => {
 .total-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; color: #475569; }
 .total-row.grand { font-size: 16px; font-weight: 800; color: #0f172a; border-top: 1px solid #f1f5f9; padding-top: 12px; margin-top: 8px; }
 @media (max-width: 640px) {
+  .filters-bar { grid-template-columns: 1fr; }
   .data-table { display: block; overflow-x: auto; }
   .page-header { flex-direction: column; align-items: flex-start; }
 }

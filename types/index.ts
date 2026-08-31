@@ -52,12 +52,55 @@ export interface Product {
   category?: string;
   initialStock?: number;
   currentStock?: number;
+  selectedVariantId?: string;
+  selectedVariantSku?: string;
+  selectedVariantName?: string;
+  selectedVariantAttributes?: ProductVariantAttributes;
   isAvailable?: boolean;
   latitude?: number;
   longitude?: number;
   deletedAt?: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+export interface ProductVariantAttributes {
+  size: string;
+  color: string;
+}
+
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  sku: string;
+  name: string;
+  price: number;
+  attributes: ProductVariantAttributes;
+}
+
+export interface Inventory {
+  id: string;
+  variantId: string;
+  sku: string;
+  quantity: number;
+  reservedQuantity: number;
+  availableQuantity: number;
+  reorderLevel: number;
+  updatedAt?: Date;
+}
+
+export type InventoryTransactionType = 'IN' | 'OUT' | 'ADJUSTMENT' | 'RETURN';
+export type InventoryReferenceType = 'PURCHASE' | 'SALE' | 'RETURN' | 'MANUAL';
+
+export interface InventoryTransaction {
+  id: string;
+  variantId: string;
+  type: InventoryTransactionType;
+  quantity: number;
+  referenceType: InventoryReferenceType;
+  referenceId: string;
+  createdAt?: Date;
+  createdBy: string;
 }
 
 export interface Chat {

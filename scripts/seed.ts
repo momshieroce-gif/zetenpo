@@ -59,7 +59,7 @@ async function resetCollections(paths: string[]) {
 }
 
 async function seed() {
-  await resetCollections(['roles', 'users', 'subscriptionPlans', 'subscriptions', 'shops', 'shopMembers', 'products', 'chats', 'delivery_charge', 'delivery_methods', 'payment_methods', 'transactions', 'transaction_feedbacks', 'transaction_statuses', 'subscriptionPlans', 'subscriptions']);
+  await resetCollections(['roles', 'users', 'subscriptionPlans', 'subscriptions', 'shops', 'shopMembers', 'products', 'productVariants', 'inventory', 'inventoryTransactions', 'chats', 'delivery_charge', 'delivery_methods', 'payment_methods', 'transactions', 'transaction_feedbacks', 'transaction_statuses']);
 
   console.log('Starting Firestore seed...');
 
@@ -391,20 +391,38 @@ async function seed() {
   let batch = db.batch();
   let batchCount = 0;
   let totalProducts = 0;
+  let totalVariants = 0;
 
-  for (const shop of shops) {
+  for (const [shopIndex, shop] of shops.entries()) {
     for (let i = 0; i < productsPerShop; i++) {
       const adj = adjectives[i % adjectives.length];
       const noun = nouns[Math.floor(i / adjectives.length) % nouns.length];
       const category = categories[i % categories.length];
       const docRef = db.collection('products').doc();
+      const productName = `${adj} ${noun} ${i + 1}`;
+      const productPrice = parseFloat((Math.random() * 490 + 9.99).toFixed(2));
+      const variantDefinitions = [
+        { size: 'Small', color: 'Black' },
+        { size: 'Medium', color: 'White' },
+        { size: 'Large', color: 'Blue' },
+      ];
+      const variants = variantDefinitions.map((attributes, variantIndex) => ({
+        ref: db.collection('productVariants').doc(),
+        sku: `MNS-${String(shopIndex + 1).padStart(3, '0')}-${String(i + 1).padStart(3, '0')}-${variantIndex + 1}`,
+        name: `${productName} - ${attributes.size} / ${attributes.color}`,
+        price: parseFloat((productPrice + variantIndex * 10).toFixed(2)),
+        quantity: Math.floor(Math.random() * 70) + 1,
+        attributes,
+      }));
+      const totalStock = variants.reduce((sum, variant) => sum + variant.quantity, 0);
       productIds.push(docRef.id);
       batch.set(docRef, {
         shopId: shop.id,
-        name: `${adj} ${noun} ${i + 1}`,
+        name: productName,
         description: `A ${adj.toLowerCase()} ${noun.toLowerCase()} perfect for everyday use.`,
-        price: parseFloat((Math.random() * 490 + 9.99).toFixed(2)),
-        initialStock: Math.floor(Math.random() * 200) + 1,
+        price: productPrice,
+        initialStock: totalStock,
+        currentStock: totalStock,
         images: Array.from({ length: Math.floor(Math.random() * 3) + 4 }, (_, j) => `https://picsum.photos/seed/${shop.id}-${i}-${j}/300/200`),
         isActive: true,
         deletedAt: null,
@@ -413,6 +431,35 @@ async function seed() {
         createdAt: now(),
         updatedAt: now(),
       });
+
+      for (const variant of variants) {
+        batch.set(variant.ref, {
+          productId: docRef.id,
+          sku: variant.sku,
+          name: variant.name,
+          price: variant.price,
+          attributes: variant.attributes,
+        });
+        batch.set(db.collection('inventory').doc(variant.ref.id), {
+          variantId: variant.ref.id,
+          sku: variant.sku,
+          quantity: variant.quantity,
+          reservedQuantity: 0,
+          availableQuantity: variant.quantity,
+          reorderLevel: 10,
+          updatedAt: now(),
+        });
+        batch.set(db.collection('inventoryTransactions').doc(), {
+          variantId: variant.ref.id,
+          type: 'IN',
+          quantity: variant.quantity,
+          referenceType: 'MANUAL',
+          referenceId: docRef.id,
+          createdAt: now(),
+          createdBy: storeAdminId,
+        });
+        totalVariants++;
+      }
       batchCount++;
       totalProducts++;
       if (batchCount === 10) {
@@ -427,6 +474,7 @@ async function seed() {
     await batch.commit();
   }
   console.log(`Seeded ${totalProducts} products.`);
+  console.log(`Seeded ${totalVariants} product variants with inventory and opening transactions.`);
 
   // --- Chats ---
   const CHAT_COUNT = 5;

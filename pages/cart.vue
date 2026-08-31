@@ -84,13 +84,17 @@ useHead({
         </div>
         <div v-else class="cart-grid">
           <div class="cart-items">
-            <div v-for="(item, index) in cart" :key="item.product.id" class="cart-item">
+            <div v-for="(item, index) in cart" :key="`${item.product.id}:${item.product.selectedVariantId || 'default'}`" class="cart-item">
               <NuxtLink :to="`/items/${item.product.id}`" class="item-image">
                 <img v-if="item.product.images?.length" :src="item.product.images[0]" :alt="item.product.name" />
                 <div v-else class="no-image"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" fill="currentColor"/></svg></div>
               </NuxtLink>
               <div class="item-info">
                 <NuxtLink :to="`/items/${item.product.id}`" class="item-name">{{ item.product.name }}</NuxtLink>
+                <div v-if="item.product.selectedVariantAttributes" class="item-variant">
+                  {{ item.product.selectedVariantAttributes.size }} / {{ item.product.selectedVariantAttributes.color }}
+                  <span v-if="item.product.selectedVariantSku"> · {{ item.product.selectedVariantSku }}</span>
+                </div>
                 <NuxtLink v-if="item.product.shopId" :to="`/shops/${item.product.shopId}`" class="item-shop">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="currentColor"/></svg>
                   {{ shopNames[item.product.shopId] || 'Shop' }}

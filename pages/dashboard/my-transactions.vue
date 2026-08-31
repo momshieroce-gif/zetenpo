@@ -138,6 +138,8 @@
             <thead>
               <tr>
                 <th>Product</th>
+                <th>Variant</th>
+                <th>SKU</th>
                 <th>Price</th>
                 <th>Qty</th>
                 <th>Subtotal</th>
@@ -146,9 +148,21 @@
             <tbody>
               <tr v-for="(item, idx) in selectedTransaction.items" :key="idx">
                 <td>
-                  <NuxtLink v-if="item.product_id" :to="'/items/' + item.product_id" class="product-link">{{ item.name || '-' }}</NuxtLink>
+                  <NuxtLink
+                    v-if="item.product_id"
+                    :to="{ path: '/items/' + item.product_id, query: item.variant_id ? { variant: item.variant_id } : {} }"
+                    class="product-link"
+                  >{{ item.name || '-' }}</NuxtLink>
                   <span v-else>{{ item.name || '-' }}</span>
                 </td>
+                <td>
+                  <div v-if="item.variant_attributes?.size || item.variant_attributes?.color" class="variant-values">
+                    <span v-if="item.variant_attributes?.size" class="variant-chip size-chip">{{ item.variant_attributes.size }}</span>
+                    <span v-if="item.variant_attributes?.color" class="variant-chip color-chip">{{ item.variant_attributes.color }}</span>
+                  </div>
+                  <span v-else class="empty-value">-</span>
+                </td>
+                <td><span v-if="item.variant_sku" class="sku-value">{{ item.variant_sku }}</span><span v-else class="empty-value">-</span></td>
                 <td>{{ formatMoney(item.price) }}</td>
                 <td>{{ item.qty ?? 1 }}</td>
                 <td>{{ formatMoney(item.subtotal) }}</td>
@@ -636,6 +650,12 @@ onMounted(() => {
 .items-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
 .product-link { color: #4f46e5; text-decoration: none; font-weight: 600; }
 .product-link:hover { text-decoration: underline; }
+.variant-values { display: flex; flex-wrap: wrap; gap: 6px; min-width: 110px; }
+.variant-chip { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; border: 1px solid; border-radius: 6px; font-size: 11px; font-weight: 800; line-height: 1.2; }
+.size-chip { color: #4338ca; background: #eef2ff; border-color: #c7d2fe; }
+.color-chip { color: #0f766e; background: #f0fdfa; border-color: #99f6e4; }
+.sku-value { display: inline-block; padding: 4px 7px; border-radius: 5px; background: #f1f5f9; color: #334155; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.empty-value { color: #94a3b8; }
 .totals { border-top: 1px solid #f1f5f9; padding-top: 16px; }
 .total-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; color: #475569; }
 .total-row.grand { font-size: 16px; font-weight: 800; color: #0f172a; border-top: 1px solid #f1f5f9; padding-top: 12px; margin-top: 8px; }

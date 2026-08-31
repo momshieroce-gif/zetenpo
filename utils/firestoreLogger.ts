@@ -121,17 +121,28 @@ async function logFirestore(
   details?: Record<string, unknown>
 ): Promise<void> {
   const path = getPath(reference);
-  if (isUserLogsPath(path)) return;
-
   const segments = path ? path.split('/') : [];
   const collectionPath = segments.length > 0
     ? (segments.length % 2 === 0 ? segments.slice(0, -1).join('/') : segments.join('/'))
     : undefined;
+  const documentPath = segments.length % 2 === 0 ? path : undefined;
+
+  if (status === 'error') {
+    console.error('[Firestore operation failed]', {
+      operation,
+      collection: collectionPath || 'unknown',
+      document: documentPath || null,
+      code: details?.code || null,
+      message: details?.message || 'Unknown error',
+    });
+  }
+
+  if (isUserLogsPath(path)) return;
 
   await writeUserLog({
     operation,
     collectionPath,
-    documentPath: segments.length % 2 === 0 ? path : undefined,
+    documentPath,
     status,
     details,
   });
@@ -156,7 +167,7 @@ export const getDoc = async (...args: any[]) => {
     await logFirestore('read', reference, 'success', { exists: result.exists() });
     return result;
   } catch (error: any) {
-    await logFirestore('read', reference, 'error', { message: error?.message || 'Unknown error' });
+    await logFirestore('read', reference, 'error', { code: error?.code, message: error?.message || 'Unknown error' });
     throw error;
   }
 };
@@ -168,7 +179,7 @@ export const getDocs = async (...args: any[]) => {
     await logFirestore('read', reference, 'success', { count: result.size });
     return result;
   } catch (error: any) {
-    await logFirestore('read', reference, 'error', { message: error?.message || 'Unknown error' });
+    await logFirestore('read', reference, 'error', { code: error?.code, message: error?.message || 'Unknown error' });
     throw error;
   }
 };
@@ -180,7 +191,7 @@ export const addDoc = async (...args: any[]) => {
     await logFirestore('write', result, 'success');
     return result;
   } catch (error: any) {
-    await logFirestore('write', reference, 'error', { message: error?.message || 'Unknown error' });
+    await logFirestore('write', reference, 'error', { code: error?.code, message: error?.message || 'Unknown error' });
     throw error;
   }
 };
@@ -192,7 +203,7 @@ export const setDoc = async (...args: any[]) => {
     await logFirestore('write', reference, 'success');
     return result;
   } catch (error: any) {
-    await logFirestore('write', reference, 'error', { message: error?.message || 'Unknown error' });
+    await logFirestore('write', reference, 'error', { code: error?.code, message: error?.message || 'Unknown error' });
     throw error;
   }
 };
@@ -204,7 +215,7 @@ export const updateDoc = async (...args: any[]) => {
     await logFirestore('write', reference, 'success');
     return result;
   } catch (error: any) {
-    await logFirestore('write', reference, 'error', { message: error?.message || 'Unknown error' });
+    await logFirestore('write', reference, 'error', { code: error?.code, message: error?.message || 'Unknown error' });
     throw error;
   }
 };
@@ -216,7 +227,7 @@ export const deleteDoc = async (...args: any[]) => {
     await logFirestore('delete', reference, 'success');
     return result;
   } catch (error: any) {
-    await logFirestore('delete', reference, 'error', { message: error?.message || 'Unknown error' });
+    await logFirestore('delete', reference, 'error', { code: error?.code, message: error?.message || 'Unknown error' });
     throw error;
   }
 };
@@ -238,7 +249,7 @@ export const onSnapshot = (...args: any[]) => {
         next(snapshot);
       },
       async (err: any) => {
-        await logFirestore('read', reference, 'error', { source: 'onSnapshot', message: err?.message || 'Snapshot error' });
+        await logFirestore('read', reference, 'error', { source: 'onSnapshot', code: err?.code, message: err?.message || 'Snapshot error' });
         if (error) error(err);
       }
     );
@@ -254,7 +265,7 @@ export const onSnapshot = (...args: any[]) => {
         if (typeof observer.next === 'function') observer.next(snapshot);
       },
       error: async (err: any) => {
-        await logFirestore('read', reference, 'error', { source: 'onSnapshot', message: err?.message || 'Snapshot error' });
+        await logFirestore('read', reference, 'error', { source: 'onSnapshot', code: err?.code, message: err?.message || 'Snapshot error' });
         if (typeof observer.error === 'function') observer.error(err);
       },
     });

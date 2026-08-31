@@ -61,7 +61,10 @@ export const useCart = () => {
   });
 
   const addToCart = (product: Product) => {
-    const existing = cart.value.find((item) => item.product.id === product.id);
+    const existing = cart.value.find((item) => {
+      return item.product.id === product.id
+        && item.product.selectedVariantId === product.selectedVariantId;
+    });
     if (existing) {
       existing.qty += 1;
       cart.value = [...cart.value];
