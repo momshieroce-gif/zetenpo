@@ -56,7 +56,7 @@ export interface Product {
   selectedVariantSku?: string;
   selectedVariantName?: string;
   selectedVariantAttributes?: ProductVariantAttributes;
-  isAvailable?: boolean;
+  isActive?: boolean;
   latitude?: number;
   longitude?: number;
   deletedAt?: Date | null;

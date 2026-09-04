@@ -235,7 +235,7 @@
               </div>
               <div class="field check">
                 <label class="checkbox">
-                  <input v-model="productForm.isAvailable" type="checkbox" />
+                  <input v-model="productForm.isActive" type="checkbox" />
                   Available
                 </label>
               </div>
@@ -256,7 +256,7 @@
             <li v-for="p in products" :key="p.id" class="product-item">
               <div class="product-info">
                 <div class="product-name">{{ p.name }}</div>
-                <div class="product-meta">₱{{ (p.price || 0).toFixed(2) }} · {{ p.category || 'No category' }} · {{ p.isAvailable ? 'Available' : 'Unavailable' }}</div>
+                <div class="product-meta">₱{{ (p.price || 0).toFixed(2) }} · {{ p.category || 'No category' }} · {{ p.isActive ? 'Available' : 'Unavailable' }}</div>
               </div>
               <div class="product-actions">
                 <button class="btn-icon edit" @click="openEditProduct(p)" title="Edit">
@@ -322,7 +322,7 @@ const productForm = reactive({
   description: '',
   price: 0,
   category: '',
-  isAvailable: true,
+  isActive: true,
 });
 const perPage = 20;
 const currentPage = ref(1);
@@ -829,7 +829,7 @@ const resetProductForm = () => {
   productForm.description = '';
   productForm.price = 0;
   productForm.category = '';
-  productForm.isAvailable = true;
+  productForm.isActive = true;
   isEditingProduct.value = false;
   editingProductId.value = null;
   productError.value = '';
@@ -876,7 +876,7 @@ const openEditProduct = (product: Product) => {
   productForm.description = product.description || '';
   productForm.price = product.price || 0;
   productForm.category = product.category || '';
-  productForm.isAvailable = product.isAvailable !== false;
+  productForm.isActive = product.isActive !== false;
 };
 
 const saveProduct = async () => {
@@ -893,7 +893,7 @@ const saveProduct = async () => {
       description: productForm.description.trim(),
       price: Number(productForm.price) || 0,
       category: productForm.category.trim(),
-      isAvailable: productForm.isAvailable,
+      isActive: productForm.isActive,
       updatedAt: serverTimestamp(),
     };
     if (isEditingProduct.value && editingProductId.value) {

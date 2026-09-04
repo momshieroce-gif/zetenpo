@@ -81,7 +81,7 @@ interface Product {
   currency: string;                   // e.g. "PHP"
   category: string;
   images: string[];                   // URLs from Firebase Storage
-  isAvailable: boolean;
+  isActive: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -178,8 +178,8 @@ Add the following Firestore composite indexes to support common queries:
 
 - `shops`: `isActive` Ascending, `isVerified` Ascending
 - `shops`: `isActive` Ascending, `location` Geo (if using GeoPoint)
-- `products`: `shopId` Ascending, `isAvailable` Ascending
-- `products`: `category` Ascending, `isAvailable` Ascending
+- `products`: `shopId` Ascending, `isActive` Ascending
+- `products`: `category` Ascending, `isActive` Ascending
 
 ## Security Rules Starter
 

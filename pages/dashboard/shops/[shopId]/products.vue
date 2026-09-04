@@ -61,7 +61,7 @@ const form = reactive({
   description: '',
   price: 0,
   category: '',
-  isAvailable: true,
+  isActive: true,
 });
 
 const stockForm = reactive({
@@ -86,7 +86,7 @@ const resetForm = () => {
   form.description = '';
   form.price = 0;
   form.category = '';
-  form.isAvailable = true;
+  form.isActive = true;
   isEditing.value = false;
   editingId.value = null;
   formError.value = '';
@@ -242,7 +242,7 @@ const openEditProduct = (product: Product) => {
   form.description = product.description || '';
   form.price = product.price || 0;
   form.category = product.category || '';
-  form.isAvailable = product.isAvailable !== false;
+  form.isActive = product.isActive !== false;
   existingImages.value = product.images || [];
   const productDefaultImage = (product as any)?.defaultImage as string | undefined;
   const existingDefaultIndex = existingImages.value.findIndex((url: string) => url === productDefaultImage);
@@ -644,7 +644,7 @@ const saveProduct = async () => {
       description: form.description.trim(),
       price: Number(form.price) || 0,
       category: form.category.trim(),
-      isAvailable: form.isAvailable,
+      isActive: form.isActive,
       images,
       defaultImage,
       updatedAt: serverTimestamp(),
@@ -753,7 +753,7 @@ onMounted(() => {
             </div>
             <div class="field check">
               <label class="checkbox">
-                <input v-model="form.isAvailable" type="checkbox" />
+                <input v-model="form.isActive" type="checkbox" />
                 Available
               </label>
             </div>
@@ -881,9 +881,9 @@ onMounted(() => {
               <td data-label="Price">₱{{ (p.price || 0).toFixed(2) }}</td>
               <td data-label="Inventory Quantity">{{ inventorySummaryByProductId[p.id]?.quantity ?? 0 }}</td>
               <td data-label="Availability">
-                <span class="badge" :class="p.isAvailable ? 'badge-success' : 'badge-inactive'">
+                <span class="badge" :class="p.isActive ? 'badge-success' : 'badge-inactive'">
                   <span class="dot"></span>
-                  {{ p.isAvailable ? 'Available' : 'Unavailable' }}
+                  {{ p.isActive ? 'Available' : 'Unavailable' }}
                 </span>
               </td>
               <td data-label="Actions" class="actions">

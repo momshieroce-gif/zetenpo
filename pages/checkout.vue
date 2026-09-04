@@ -151,7 +151,7 @@
 <script setup lang="ts">
 import { GoogleMap, AdvancedMarker, InfoWindow } from 'vue3-google-map';
 import { ref, computed, watch, onMounted } from 'vue';
-import { doc, getDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from '~/utils/firestoreLogger';
+import { doc, getDoc, addDoc, collection, query, where, getDocs, serverTimestamp, updateDoc } from '~/utils/firestoreLogger';
 import type { Shop } from '~/types';
 
 definePageMeta({ middleware: 'auth' });
@@ -451,7 +451,7 @@ const processOrder = async () => {
     const deliveryChargeValue = deliveryCharge.value;
     const totalValue = parseFloat((subtotalValue + deliveryChargeValue).toFixed(2));
     const orderNumber = `TRX-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
-    await addDoc(collection(db, 'transactions'), {
+    const transactionRef = await addDoc(collection(db, 'transactions'), {
       order_number: orderNumber,
       user_id: userId,
       store_id: shop.value.id,
@@ -470,6 +470,36 @@ const processOrder = async () => {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    await Promise.all(orderItems.map(async (item) => {
+      if (!item.variant_id) {
+        throw new Error(`No inventory variant was selected for ${item.name}.`);
+      }
+
+      const inventoryRef = doc(db, 'inventory', item.variant_id);
+      const inventorySnapshot = await getDoc(inventoryRef);
+      if (!inventorySnapshot.exists()) {
+        throw new Error(`Inventory was not found for ${item.name}.`);
+      }
+
+      const availableQuantity = Number(inventorySnapshot.data().availableQuantity || 0);
+      if (availableQuantity < item.qty) {
+        throw new Error(`Only ${availableQuantity} item(s) of ${item.name} are available.`);
+      }
+
+      await updateDoc(inventoryRef, {
+        availableQuantity: availableQuantity - item.qty,
+        updatedAt: serverTimestamp(),
+      });
+      await addDoc(collection(db, 'inventoryTransactions'), {
+        variantId: item.variant_id,
+        type: 'OUT',
+        quantity: item.qty,
+        referenceType: 'SALES',
+        referenceId: transactionRef.id,
+        createdAt: serverTimestamp(),
+        createdBy: userId,
+      });
+    }));
     clearCart();
     navigateTo('/cart');
   } catch (e: any) {

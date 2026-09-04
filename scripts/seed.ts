@@ -59,7 +59,7 @@ async function resetCollections(paths: string[]) {
 }
 
 async function seed() {
-  await resetCollections(['roles', 'users', 'subscriptionPlans', 'subscriptions', 'shops', 'shopMembers', 'products', 'productVariants', 'inventory', 'inventoryTransactions', 'chats', 'delivery_charge', 'delivery_methods', 'payment_methods', 'transactions', 'transaction_feedbacks', 'transaction_statuses']);
+  await resetCollections(['roles', 'users', 'chartAccounts', 'subscriptionPlans', 'subscriptions', 'shops', 'shopMembers', 'products', 'productVariants', 'inventory', 'inventoryTransactions', 'chats', 'delivery_charge', 'delivery_methods', 'payment_methods', 'transactions', 'transaction_feedbacks', 'transaction_statuses']);
 
   console.log('Starting Firestore seed...');
 
@@ -114,6 +114,32 @@ async function seed() {
     await db.collection('roles').doc(id).set({ ...data, createdAt: now(), updatedAt: now() });
   }
   console.log(`Seeded ${roles.length} roles.`);
+
+  // --- Chart Accounts ---
+  const chartAccounts = [
+    { code: '1000', name: 'Cash', type: 'asset', normalBalance: 'debit' },
+    { code: '1100', name: 'Inventory', type: 'asset', normalBalance: 'debit' },
+    { code: '2000', name: 'Accounts Payable', type: 'liability', normalBalance: 'credit' },
+    { code: '2100', name: 'Loan Payable', type: 'liability', normalBalance: 'credit' },
+    { code: '3000', name: "Owner's Equity", type: 'equity', normalBalance: 'credit' },
+    { code: '4000', name: 'Sales Revenue', type: 'revenue', normalBalance: 'credit' },
+    { code: '5000', name: 'Rent Expense', type: 'expense', normalBalance: 'debit' },
+    { code: '5100', name: 'Supplies Expense', type: 'expense', normalBalance: 'debit' },
+    { code: '5200', name: 'Salaries and Wages Expense', type: 'expense', normalBalance: 'debit' },
+  ];
+
+  const chartAccountsBatch = db.batch();
+  for (const account of chartAccounts) {
+    const accountRef = db.collection('chartAccounts').doc(account.code);
+    chartAccountsBatch.set(accountRef, {
+      ...account,
+      isActive: true,
+      createdAt: now(),
+      updatedAt: now(),
+    });
+  }
+  await chartAccountsBatch.commit();
+  console.log(`Seeded ${chartAccounts.length} chart accounts.`);
 
   // --- Users ---
   const superAdminId = db.collection('users').doc().id;

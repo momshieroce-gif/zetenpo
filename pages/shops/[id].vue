@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { collection, doc, getDoc, getDocs, query, where } from '~/utils/firestoreLogger';
-import type { Product, Shop } from '~/types';
+import type { Inventory, Product, ProductVariant, Shop } from '~/types';
 
 const route = useRoute();
 const shopId = route.params.id as string;
@@ -8,6 +8,9 @@ const shopId = route.params.id as string;
 const nuxtApp = useNuxtApp() as any;
 const shop = ref<Shop | null>(null);
 const products = ref<Product[]>([]);
+const productIdsWithVariants = ref<Set<string>>(new Set());
+const variantsByProductId = ref<Record<string, ProductVariant[]>>({});
+const inventoryByVariantId = ref<Record<string, Inventory>>({});
 const loading = ref(true);
 const page = ref(1);
 const pageSize = 10;
@@ -16,14 +19,40 @@ const { cart, addToCart } = useCart();
 const totalPages = computed(() => Math.ceil(products.value.length / pageSize));
 const paginatedProducts = computed(() => products.value.slice((page.value - 1) * pageSize, page.value * pageSize));
 const showMultiShopModal = ref(false);
+const selectedProduct = ref<Product | null>(null);
+const selectedVariantId = ref('');
+const selectedVariants = computed(() => selectedProduct.value ? variantsByProductId.value[selectedProduct.value.id] || [] : []);
+const selectedVariant = computed(() => selectedVariants.value.find((variant: ProductVariant) => variant.id === selectedVariantId.value) || null);
+const selectedInventory = computed(() => selectedVariant.value ? inventoryByVariantId.value[selectedVariant.value.id] : null);
+const selectedAvailableQuantity = computed(() => Number(selectedInventory.value?.availableQuantity || 0));
 
-const handleAddToCart = (product: Product) => {
+const openVariantPicker = (product: Product) => {
+  selectedProduct.value = product;
+  selectedVariantId.value = '';
+};
+
+const closeVariantPicker = () => {
+  selectedProduct.value = null;
+  selectedVariantId.value = '';
+};
+
+const handleAddToCart = () => {
+  if (!selectedProduct.value || !selectedVariant.value || selectedAvailableQuantity.value <= 0) return;
   const cartShopId = cart.value.length ? cart.value[0].product.shopId : null;
   if (cartShopId && cartShopId !== shopId) {
+    closeVariantPicker();
     showMultiShopModal.value = true;
     return;
   }
-  addToCart(product);
+  addToCart({
+    ...selectedProduct.value,
+    price: Number(selectedVariant.value.price),
+    selectedVariantId: selectedVariant.value.id,
+    selectedVariantSku: selectedVariant.value.sku,
+    selectedVariantName: selectedVariant.value.name,
+    selectedVariantAttributes: selectedVariant.value.attributes,
+  });
+  closeVariantPicker();
 };
 
 useHead({
@@ -37,17 +66,44 @@ const fetchData = async () => {
 
   const shopDoc = await getDoc(doc(db, 'shops', shopId));
   if (shopDoc.exists()) {
-    shop.value = { id: shopDoc.id, ...shopDoc.data() } as Shop;
+    const shopData = shopDoc.data() as Omit<Shop, 'id'>;
+    shop.value = { id: shopDoc.id, ...shopData };
   }
 
-  const q = query(collection(db, 'products'), where('shopId', '==', shopId));
+  const q = query(
+    collection(db, 'products'),
+    where('shopId', '==', shopId),
+    where('isActive', '==', true)
+  );
   const snapshot = await getDocs(q);
   const list: Product[] = [];
   snapshot.forEach((d) => {
     const data = d.data() as Product;
     list.push({ ...data, id: d.id });
   });
-  products.value = list;
+  const variantResults = await Promise.all(list.map(async (product) => {
+    const variantsQuery = query(
+      collection(db, 'productVariants'),
+      where('productId', '==', product.id)
+    );
+    const variantsSnapshot = await getDocs(variantsQuery);
+    const variants = variantsSnapshot.docs.map((variantDoc) => {
+      const variantData = variantDoc.data() as Omit<ProductVariant, 'id'>;
+      return { id: variantDoc.id, ...variantData };
+    });
+    return { productId: product.id, variants };
+  }));
+  variantsByProductId.value = Object.fromEntries(variantResults.map(({ productId, variants }) => [productId, variants]));
+  productIdsWithVariants.value = new Set(variantResults.filter(({ variants }) => variants.length > 0).map(({ productId }) => productId));
+  const variants = variantResults.flatMap((result) => result.variants);
+  const inventoryResults = await Promise.all(variants.map(async (variant) => {
+    const inventorySnapshot = await getDoc(doc(db, 'inventory', variant.id));
+    if (!inventorySnapshot.exists()) return null;
+    const inventoryData = inventorySnapshot.data() as Omit<Inventory, 'id'>;
+    return [variant.id, { id: inventorySnapshot.id, ...inventoryData }] as const;
+  }));
+  inventoryByVariantId.value = Object.fromEntries(inventoryResults.filter((entry): entry is readonly [string, Inventory] => entry !== null));
+  products.value = list.filter((product) => productIdsWithVariants.value.has(product.id));
   loading.value = false;
 };
 
@@ -97,7 +153,7 @@ onMounted(fetchData);
               <div v-if="product.stock !== undefined" class="product-stock">{{ product.stock }} in stock</div>
             <div class="product-actions">
               <NuxtLink :to="`/items/${product.id}`" class="view-btn">View</NuxtLink>
-              <button class="add-btn" @click.stop="handleAddToCart(product)">Add to Cart</button>
+              <button class="add-btn" @click.stop="openVariantPicker(product)">Add to Cart</button>
             </div>
             </div>
           </div>
@@ -107,6 +163,48 @@ onMounted(fetchData);
           <button class="page-btn" :disabled="page === 1" @click="page--">Previous</button>
           <span class="page-info">Page {{ page }} of {{ totalPages }}</span>
           <button class="page-btn" :disabled="page === totalPages" @click="page++">Next</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="selectedProduct" class="modal-overlay" @click.self="closeVariantPicker">
+      <div class="modal-card variant-modal" role="dialog" aria-modal="true" aria-labelledby="variant-modal-title">
+        <div class="modal-header">
+          <div>
+            <div class="modal-eyebrow">Choose an option</div>
+            <h3 id="variant-modal-title">{{ selectedProduct.name }}</h3>
+          </div>
+          <button type="button" class="close-btn" aria-label="Close variant selection" @click="closeVariantPicker">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="variant-options" role="radiogroup" aria-label="Product variant">
+            <button
+              v-for="variant in selectedVariants"
+              :key="variant.id"
+              type="button"
+              class="variant-option"
+              :class="{ active: selectedVariantId === variant.id }"
+              :disabled="Number(inventoryByVariantId[variant.id]?.availableQuantity || 0) <= 0"
+              :aria-checked="selectedVariantId === variant.id"
+              role="radio"
+              @click="selectedVariantId = variant.id"
+            >
+              <span>
+                <strong>{{ variant.attributes.size }} / {{ variant.attributes.color }}</strong>
+                <small>{{ variant.sku }}</small>
+              </span>
+              <span class="variant-price">
+                ₱{{ Number(variant.price).toFixed(2) }}
+                <small>{{ Number(inventoryByVariantId[variant.id]?.availableQuantity || 0) > 0 ? `${inventoryByVariantId[variant.id].availableQuantity} available` : 'Out of stock' }}</small>
+              </span>
+            </button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="modal-btn modal-btn-ghost" @click="closeVariantPicker">Cancel</button>
+          <button type="button" class="modal-btn modal-btn-primary" :disabled="!selectedVariant || selectedAvailableQuantity <= 0" @click="handleAddToCart">
+            Add selected variant
+          </button>
         </div>
       </div>
     </div>
@@ -416,8 +514,19 @@ onMounted(fetchData);
 .modal-btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 18px; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; text-decoration: none; border: none; }
 .modal-btn-primary { background: #f59e0b; color: #fff; }
 .modal-btn-primary:hover { background: #d97706; }
+.modal-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .modal-btn-ghost { background: transparent; color: #64748b; }
 .modal-btn-ghost:hover { background: #f1f5f9; }
+.variant-modal { max-width: 520px; overflow: hidden; }
+.modal-eyebrow { margin-bottom: 3px; color: #d97706; font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+.variant-options { display: grid; gap: 10px; }
+.variant-option { width: 100%; min-height: 68px; padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; color: #0f172a; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 16px; text-align: left; }
+.variant-option:hover:not(:disabled) { border-color: #f59e0b; background: #fffbeb; }
+.variant-option.active { border-color: #f59e0b; box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.18); background: #fffbeb; }
+.variant-option:disabled { cursor: not-allowed; opacity: 0.5; background: #f8fafc; }
+.variant-option span { display: grid; gap: 4px; }
+.variant-option small { color: #64748b; font-size: 11px; }
+.variant-price { color: #6d28d9; font-weight: 900; text-align: right; white-space: nowrap; }
 
 @media (max-width: 600px) {
   .shop-hero {
