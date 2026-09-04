@@ -60,7 +60,7 @@
               </div>
               <div class="map-wrap">
                 <ClientOnly fallback="Loading map...">
-                  <GoogleMap v-if="apiKey" ref="mapRef" :api-key="apiKey" :map-id="mapId || undefined" class="checkout-map" :center="mapCenter" :zoom="currentZoom" :disable-default-ui="false" :draggable="true" :clickable-icons="false" :libraries="['places', 'marker', 'routes']">
+                  <GoogleMap v-if="apiKey && hasUserLocation" ref="mapRef" :api-key="apiKey" :map-id="mapId || undefined" class="checkout-map" :center="mapCenter" :zoom="currentZoom" :disable-default-ui="false" :draggable="true" :clickable-icons="false" :libraries="['places', 'marker', 'routes']">
                     <AdvancedMarker :options="userMarkerOptions">
                       <InfoWindow v-model="showUserInfo" :options="{ headerContent: 'You are here', disableAutoPan: false }">
                       </InfoWindow>
@@ -70,8 +70,17 @@
                       </InfoWindow>
                     </AdvancedMarker>
                   </GoogleMap>
-                  <div v-else class="map-placeholder">Add a Google Maps API key in your environment to view the map.</div>
-                  <div class="map-controls">
+                  <div v-else-if="!apiKey" class="map-placeholder">Add a Google Maps API key in your environment to view the map.</div>
+                  <div v-else class="map-placeholder location-placeholder">
+                    <div v-if="isLocating" class="location-spinner" aria-hidden="true"></div>
+                    <svg v-else width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="currentColor" />
+                    </svg>
+                    <strong>{{ isLocating ? 'Searching for your location...' : 'Location access is required' }}</strong>
+                    <span>{{ isLocating ? 'Please allow location access when prompted.' : locationError }}</span>
+                    <button v-if="!isLocating" type="button" class="location-retry-btn" @click="initializeLocation">Try Again</button>
+                  </div>
+                  <div v-if="hasUserLocation" class="map-controls">
                     <button type="button" class="map-zoom-btn" @click="zoomIn">+</button>
                     <button type="button" class="map-zoom-btn" @click="zoomOut">−</button>
                   </div>
@@ -152,7 +161,7 @@
 import { GoogleMap, AdvancedMarker, InfoWindow } from 'vue3-google-map';
 import { ref, computed, watch, onMounted } from 'vue';
 import { doc, getDoc, addDoc, collection, query, where, getDocs, serverTimestamp, updateDoc } from '~/utils/firestoreLogger';
-import type { Shop } from '~/types';
+import type { Inventory, Shop } from '~/types';
 
 definePageMeta({ middleware: 'auth' });
 
@@ -169,10 +178,12 @@ const mapId = config.googleMapsId;
 const shopId = computed(() => cart.value[0]?.product?.shopId || '');
 const hasMultipleShops = computed(() => new Set(cart.value.map((i) => i.product.shopId)).size > 1);
 const shop = ref<Shop | null>(null);
-const userLat = ref(14.609);
-const userLng = ref(120.994);
+const userLat = ref<number | null>(null);
+const userLng = ref<number | null>(null);
 const searchedLat = ref<number | null>(null);
 const searchedLng = ref<number | null>(null);
+const isLocating = ref(true);
+const locationError = ref('Please enable location services and allow access to continue.');
 const currentZoom = ref(15);
 const mobile = ref('');
 const note = ref('');
@@ -189,6 +200,7 @@ let directionsRenderer: any = null;
 let directionsService: any = null;
 
 const subtotal = computed(() => cart.value.reduce((sum, item) => sum + Number(item.product.price || 0) * item.qty, 0));
+const hasUserLocation = computed(() => userLat.value !== null && userLng.value !== null);
 
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
   const R = 6371;
@@ -199,7 +211,10 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number): nu
   return R * c;
 };
 
-const distance = computed(() => (shop.value ? getDistance(userLat.value, userLng.value, shop.value.latitude, shop.value.longitude) : 0));
+const distance = computed(() => {
+  if (!shop.value || userLat.value === null || userLng.value === null) return 0;
+  return getDistance(userLat.value, userLng.value, shop.value.latitude, shop.value.longitude);
+});
 const deliveryCharge = computed(() => {
   if (deliveryMethod.value === 'pickup') return 0;
   return Math.round((deliveryChargeSettings.value.standard_delivery_charge + distance.value * deliveryChargeSettings.value.amount_per_km) * 100) / 100;
@@ -210,10 +225,10 @@ const mapCenter = computed(() => {
   if (searchedLat.value !== null && searchedLng.value !== null) {
     return { lat: searchedLat.value, lng: searchedLng.value };
   }
-  if (shop.value) {
+  if (shop.value && userLat.value !== null && userLng.value !== null) {
     return { lat: (userLat.value + shop.value.latitude) / 2, lng: (userLng.value + shop.value.longitude) / 2 };
   }
-  return { lat: userLat.value, lng: userLng.value };
+  return { lat: userLat.value!, lng: userLng.value! };
 });
 
 const fetchShop = async () => {
@@ -237,16 +252,39 @@ const fetchDeliveryCharge = async () => {
   }
 };
 
-const getUserLocation = () => {
-  if (process.client && navigator.geolocation) {
+const getUserLocation = (): Promise<boolean> => {
+  isLocating.value = true;
+  locationError.value = '';
+  if (!process.client || !navigator.geolocation) {
+    isLocating.value = false;
+    locationError.value = 'Location services are not supported by this browser.';
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         userLat.value = position.coords.latitude;
         userLng.value = position.coords.longitude;
+        isLocating.value = false;
+        resolve(true);
       },
-      () => {}
+      () => {
+        isLocating.value = false;
+        locationError.value = 'Please enable location services and allow access to continue.';
+        resolve(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
-  }
+  });
+};
+
+const initializeLocation = async () => {
+  if (!(await getUserLocation())) return;
+  await nextTick();
+  await waitForMapReady();
+  initAutocomplete();
+  drawRoute();
 };
 
 const waitForMapReady = () => {
@@ -303,7 +341,7 @@ const clearSearch = () => {
 };
 
 const drawRoute = () => {
-  if (!process.client || !shop.value) return;
+  if (!process.client || !shop.value || userLat.value === null || userLng.value === null) return;
   const win = window as any;
   const map = mapRef.value?.$mapObject || mapRef.value?.map || mapRef.value?.$map;
   if (!win.google?.maps?.DirectionsService || !map) return;
@@ -368,7 +406,7 @@ const createStoreMarkerElement = (): HTMLElement => {
 };
 
 const userMarkerOptions = computed(() => ({
-  position: { lat: userLat.value, lng: userLng.value },
+  position: { lat: userLat.value!, lng: userLng.value! },
   title: 'Your Location',
   gmpDraggable: false,
   content: createUserMarkerElement(),
@@ -422,6 +460,10 @@ const processOrder = async () => {
     mobileError.value = 'Please enter a valid mobile number.';
     return;
   }
+  if (!hasUserLocation.value) {
+    mobileError.value = 'Please allow location access before completing your order.';
+    return;
+  }
   const db = nuxtApp.$firebase?.db;
   const auth = nuxtApp.$firebase?.auth;
   if (!db || !shop.value || !cart.value.length) {
@@ -455,9 +497,9 @@ const processOrder = async () => {
       order_number: orderNumber,
       user_id: userId,
       store_id: shop.value.id,
-      user_location: { latitude: userLat.value, longitude: userLng.value },
+      user_location: { latitude: userLat.value!, longitude: userLng.value! },
       store_location: { latitude: shop.value.latitude, longitude: shop.value.longitude },
-      delivery_location: { latitude: userLat.value, longitude: userLng.value, address: searchLocation.value || '' },
+      delivery_location: { latitude: userLat.value!, longitude: userLng.value!, address: searchLocation.value || '' },
       delivery_method: deliveryMethod.value || 'delivery',
       payment_method: paymentMethod.value || 'cash',
       items: orderItems,
@@ -481,7 +523,8 @@ const processOrder = async () => {
         throw new Error(`Inventory was not found for ${item.name}.`);
       }
 
-      const availableQuantity = Number(inventorySnapshot.data().availableQuantity || 0);
+      const inventoryData = inventorySnapshot.data() as Omit<Inventory, 'id'>;
+      const availableQuantity = Number(inventoryData.availableQuantity || 0);
       if (availableQuantity < item.qty) {
         throw new Error(`Only ${availableQuantity} item(s) of ${item.name} are available.`);
       }
@@ -510,10 +553,9 @@ const processOrder = async () => {
 };
 
 onMounted(() => {
-  getUserLocation();
   fetchShop();
   fetchDeliveryCharge();
-  waitForMapReady().then(() => { initAutocomplete(); drawRoute(); });
+  initializeLocation();
 });
 
 watch([shop, userLat, userLng], () => drawRoute());
@@ -843,6 +885,55 @@ watch([shop, userLat, userLng], () => drawRoute());
   color: var(--gray-500);
   background: #f9fafb;
   border-radius: 14px;
+}
+
+.location-placeholder {
+  flex-direction: column;
+  gap: 12px;
+  color: #4f46e5;
+  background: linear-gradient(145deg, #f8fafc 0%, #eef2ff 100%);
+  border: 1px dashed #c7d2fe;
+}
+
+.location-placeholder strong {
+  color: #1f2937;
+  font-size: 16px;
+}
+
+.location-placeholder span {
+  max-width: 360px;
+  color: #6b7280;
+  font-size: 13px;
+  text-align: center;
+}
+
+.location-spinner {
+  width: 38px;
+  height: 38px;
+  border: 4px solid #c7d2fe;
+  border-top-color: #4f46e5;
+  border-radius: 50%;
+  animation: locationSpin 0.8s linear infinite;
+}
+
+.location-retry-btn {
+  min-height: 40px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 8px;
+  background: #4f46e5;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.location-retry-btn:hover {
+  background: #4338ca;
+}
+
+@keyframes locationSpin {
+  to { transform: rotate(360deg); }
 }
 
 .map-footer {

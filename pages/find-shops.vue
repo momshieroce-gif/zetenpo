@@ -54,7 +54,7 @@
       </div>
       <div class="map-frame">
         <ClientOnly fallback="Loading map...">
-          <GoogleMap ref="mapRef" v-if="apiKey" :api-key="apiKey" :center="center" :zoom="zoom" style="width: 100%; height: 100%" :map-id="mapId || undefined" :disable-default-ui="false" :draggable="true" :clickable-icons="false" :libraries="['places', 'marker', 'routes']">
+          <GoogleMap ref="mapRef" v-if="apiKey && hasLocation" :api-key="apiKey" :center="center" :zoom="zoom" style="width: 100%; height: 100%" :map-id="mapId || undefined" :disable-default-ui="false" :draggable="true" :clickable-icons="false" :libraries="['places', 'marker', 'routes']">
             <AdvancedMarker :options="getLocationMarkerOptions()">
               <InfoWindow :options="{ headerContent: 'You are here', disableAutoPan: false }" v-model="showInfo">
               </InfoWindow>
@@ -65,7 +65,7 @@
               </InfoWindow>
             </AdvancedMarker>
           </GoogleMap>
-          <div v-else class="map-placeholder">Add a Google Maps API key in your environment to view the map.</div>
+          <div v-else class="map-placeholder">{{ apiKey ? 'Enable location access to view nearby shops.' : 'Add a Google Maps API key in your environment to view the map.' }}</div>
         </ClientOnly>
       </div>
     </div>
@@ -87,10 +87,10 @@ useHead({
 const config = useRuntimeConfig().public;
 const apiKey = config.googleMapsApiKey;
 const mapId = config.googleMapsId;
-const userLat = ref(14.609);
-const userLng = ref(120.994);
-const lat = ref(14.609);
-const lng = ref(120.994);
+const userLat = ref<number | null>(null);
+const userLng = ref<number | null>(null);
+const lat = ref<number | null>(null);
+const lng = ref<number | null>(null);
 const zoom = ref(15);
 const showInfo = ref(true);
 const selectedShop = ref<ShopWithDistance | null>(null);
@@ -98,7 +98,8 @@ const searchText = ref('');
 const radius = ref(5);
 const isSearching = ref(false);
 
-const center = computed(() => ({ lat: lat.value, lng: lng.value }));
+const hasLocation = computed(() => userLat.value !== null && userLng.value !== null);
+const center = computed(() => ({ lat: lat.value!, lng: lng.value! }));
 
 type ShopWithDistance = Shop & { distance: number };
 
@@ -120,17 +121,30 @@ const filteredShops = computed(() => {
   return shops.value.filter((s: ShopWithDistance) => s.name.toLowerCase().includes(q) || s.address?.toLowerCase().includes(q));
 });
 
-const getLocation = () => {
-  if (process.client && navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition((position) => {
+const showLocationRequired = () => {
+  window.alert('Location access is required to find nearby shops. Please enable location services and allow access, then try again.');
+};
+
+const getLocation = (): Promise<boolean> => {
+  if (!process.client || !navigator.geolocation) {
+    if (process.client) showLocationRequired();
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(async (position) => {
       userLat.value = position.coords.latitude;
       userLng.value = position.coords.longitude;
       lat.value = position.coords.latitude;
       lng.value = position.coords.longitude;
+      await nextTick();
+      waitForMapReady();
+      resolve(true);
     }, () => {
-      // fallback
-    });
-  }
+      showLocationRequired();
+      resolve(false);
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+  });
 };
 
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -150,9 +164,10 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): nu
 const search = async () => {
   if (isSearching.value) return;
   isSearching.value = true;
-  getLocation();
 
   try {
+    if (!hasLocation.value && !(await getLocation())) return;
+
     if (process.client && nuxtApp.$firebase?.db) {
       const db = nuxtApp.$firebase.db;
       const snapshot = await getDocs(collection(db, 'shops'));
@@ -161,7 +176,7 @@ const search = async () => {
       snapshot.forEach((doc) => {
         const data = doc.data() as Shop;
         if (data.deletedAt) return;
-        const d = getDistance(userLat.value, userLng.value, data.latitude, data.longitude);
+        const d = getDistance(userLat.value!, userLng.value!, data.latitude, data.longitude);
         const { id: _, ...shopData } = data;
         fetched.push({ ...shopData, id: doc.id, distance: d });
       });
@@ -437,11 +452,6 @@ const waitForMapReady = () => {
   });
 };
 
-onMounted(() => {
-  getLocation();
-  search();
-  waitForMapReady();
-});
 </script>
 
 <style scoped>

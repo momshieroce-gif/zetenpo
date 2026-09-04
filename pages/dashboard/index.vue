@@ -194,6 +194,34 @@ const formatCurrency = (value: number) => {
   }
 };
 
+const getSummaryDocs = async (label: string, reference: any) => {
+  try {
+    return await getDocs(reference);
+  } catch (error: any) {
+    console.error(`[Dashboard summary] ${label} failed`, {
+      code: error?.code || 'unknown',
+      message: error?.message || 'Unknown Firestore error',
+      role: roleId.value || 'unknown',
+      uid: uid.value || 'missing',
+    });
+    throw error;
+  }
+};
+
+const getDocsForShops = async (label: string, collectionName: string, field: string, shopIds: string[]) => {
+  if (!shopIds.length) return [];
+  const batches = Array.from({ length: Math.ceil(shopIds.length / 30) }, (_, index) => {
+    return shopIds.slice(index * 30, (index + 1) * 30);
+  });
+  const snapshots = await Promise.all(batches.map((ids, index) => {
+    return getSummaryDocs(
+      `${label} (${field} batch ${index + 1}/${batches.length})`,
+      query(collection(db, collectionName), where(field, 'in', ids))
+    );
+  }));
+  return snapshots.flatMap(snapshot => snapshot.docs);
+};
+
 const fetchSummary = async () => {
   if (!db) return;
   loading.value = true;
@@ -201,10 +229,10 @@ const fetchSummary = async () => {
     const uidVal = uid.value;
     if (isSuperAdmin.value) {
       const [shopsSnap, productsSnap, transactionsSnap, usersSnap] = await Promise.all([
-        getDocs(collection(db, 'shops')),
-        getDocs(collection(db, 'products')),
-        getDocs(collection(db, 'transactions')),
-        getDocs(collection(db, 'users')),
+        getSummaryDocs('shops read', collection(db, 'shops')),
+        getSummaryDocs('products read', collection(db, 'products')),
+        getSummaryDocs('transactions read', collection(db, 'transactions')),
+        getSummaryDocs('users read', collection(db, 'users')),
       ]);
       summary.shops = shopsSnap.size;
       summary.products = productsSnap.size;
@@ -215,16 +243,16 @@ const fetchSummary = async () => {
         .map(d => ({ id: d.id, ...(d.data() as any) }))
         .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
     } else if (isStoreAdmin.value) {
-      const shopsSnap = await getDocs(query(collection(db, 'shops'), where('ownerId', '==', uidVal)));
+      const shopsSnap = await getSummaryDocs(
+        'owned shops query',
+        query(collection(db, 'shops'), where('ownerId', '==', uidVal))
+      );
       const shopIds = shopsSnap.docs.map(d => d.id);
-      const [productsSnap, transactionsSnap, membersSnap] = await Promise.all([
-        getDocs(collection(db, 'products')),
-        getDocs(collection(db, 'transactions')),
-        getDocs(collection(db, 'shopMembers')),
+      const [products, transactions, members] = await Promise.all([
+        getDocsForShops('products query', 'products', 'shopId', shopIds),
+        getDocsForShops('transactions query', 'transactions', 'store_id', shopIds),
+        getDocsForShops('shop members query', 'shopMembers', 'shopId', shopIds),
       ]);
-      const products = productsSnap.docs.filter(d => shopIds.includes((d.data() as any).shopId));
-      const transactions = transactionsSnap.docs.filter(d => shopIds.includes((d.data() as any).store_id));
-      const members = membersSnap.docs.filter(d => shopIds.includes((d.data() as any).shopId));
       summary.shops = shopIds.length;
       summary.products = products.length;
       summary.transactions = transactions.length;
@@ -234,14 +262,15 @@ const fetchSummary = async () => {
         .map(d => ({ id: d.id, ...(d.data() as any) }))
         .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
     } else if (isStoreStaff.value) {
-      const membersSnap = await getDocs(query(collection(db, 'shopMembers'), where('uid', '==', uidVal)));
+      const membersSnap = await getSummaryDocs(
+        'staff memberships query',
+        query(collection(db, 'shopMembers'), where('uid', '==', uidVal))
+      );
       const shopIds = membersSnap.docs.map(d => (d.data() as any).shopId);
-      const [productsSnap, transactionsSnap] = await Promise.all([
-        getDocs(collection(db, 'products')),
-        getDocs(collection(db, 'transactions')),
+      const [products, transactions] = await Promise.all([
+        getDocsForShops('products query', 'products', 'shopId', shopIds),
+        getDocsForShops('transactions query', 'transactions', 'store_id', shopIds),
       ]);
-      const products = productsSnap.docs.filter(d => shopIds.includes((d.data() as any).shopId));
-      const transactions = transactionsSnap.docs.filter(d => shopIds.includes((d.data() as any).store_id));
       summary.shops = shopIds.length;
       summary.products = products.length;
       summary.transactions = transactions.length;
@@ -251,7 +280,10 @@ const fetchSummary = async () => {
         .map(d => ({ id: d.id, ...(d.data() as any) }))
         .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
     } else if (isCustomer.value) {
-      const transactionsSnap = await getDocs(query(collection(db, 'transactions'), where('user_id', '==', uidVal)));
+      const transactionsSnap = await getSummaryDocs(
+        'customer transactions query',
+        query(collection(db, 'transactions'), where('user_id', '==', uidVal))
+      );
       summary.shops = 0;
       summary.products = 0;
       summary.transactions = transactionsSnap.size;
@@ -262,7 +294,12 @@ const fetchSummary = async () => {
         .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
     }
   } catch (e: any) {
-    console.error('Dashboard summary error:', e);
+    console.error('Dashboard summary error:', {
+      code: e?.code || 'unknown',
+      message: e?.message || 'Unknown Firestore error',
+      role: roleId.value || 'unknown',
+      uid: uid.value || 'missing',
+    });
   } finally {
     loading.value = false;
   }

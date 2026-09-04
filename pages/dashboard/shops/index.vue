@@ -70,6 +70,54 @@
           </tr>
         </tbody>
       </table>
+      <div class="mobile-shops" aria-label="Shops">
+        <article v-for="shop in paginatedShops" :key="shop.id" class="shop-card">
+          <div class="shop-card-header">
+            <div class="shop-card-identity">
+              <div class="shop-avatar">{{ shop.name?.[0] || 'S' }}</div>
+              <div class="shop-card-copy">
+                <div class="shop-name">{{ shop.name }}</div>
+                <div class="shop-address">{{ shop.address || 'No address' }}</div>
+              </div>
+            </div>
+            <span class="badge" :class="shop.isActive ? 'badge-success' : 'badge-inactive'">
+              <span class="dot"></span>
+              {{ shop.isActive ? 'Active' : 'Inactive' }}
+            </span>
+          </div>
+
+          <div v-if="shop.isActive" class="shop-card-actions">
+            <button
+              v-if="shop.ownerId === authStore.user?.uid"
+              class="mobile-action members"
+              @click="openMembers(shop)">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <span>Members</span>
+            </button>
+            <button class="mobile-action products" @click="navigateTo('/dashboard/shops/' + shop.id + '/products')">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+              <span>Products</span>
+            </button>
+            <button
+              v-if="shop.ownerId === authStore.user?.uid"
+              class="mobile-action edit"
+              @click="openEdit(shop)">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              <span>Edit</span>
+            </button>
+            <button
+              v-if="shop.ownerId === authStore.user?.uid"
+              class="mobile-action delete"
+              @click="softDelete(shop.id)">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+              <span>Delete</span>
+            </button>
+          </div>
+          <div v-else class="shop-card-inactive">
+            This shop is currently inactive.
+          </div>
+        </article>
+      </div>
       <div v-if="totalPages > 1" class="pagination">
         <button class="btn btn-ghost" :disabled="currentPage === 1" @click="prevPage">Previous</button>
         <span class="page-info">Page {{ currentPage }} of {{ totalPages }}</span>
@@ -958,6 +1006,20 @@ onMounted(() => {
 .data-table td { padding: 16px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
 .data-table tbody tr:hover { background: #f8fafc; }
 .data-table tr:last-child td { border-bottom: none; }
+.mobile-shops { display: none; }
+.shop-card { overflow: hidden; background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 8px 24px rgba(15,23,42,0.06); }
+.shop-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px; }
+.shop-card-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.shop-card-copy { min-width: 0; }
+.shop-card-copy .shop-name { overflow-wrap: anywhere; }
+.shop-card-copy .shop-address { line-height: 1.45; overflow-wrap: anywhere; }
+.shop-card-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 16px 16px; border-top: 1px solid #f1f5f9; background: #fcfcfd; }
+.mobile-action { min-height: 40px; padding: 0 10px; border: 1px solid transparent; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-size: 12px; font-weight: 800; cursor: pointer; }
+.mobile-action.members { color: #7e22ce; background: #faf5ff; border-color: #e9d5ff; }
+.mobile-action.products { color: #0f766e; background: #f0fdfa; border-color: #99f6e4; }
+.mobile-action.edit { color: #4338ca; background: #eef2ff; border-color: #c7d2fe; }
+.mobile-action.delete { color: #dc2626; background: #fef2f2; border-color: #fecaca; }
+.shop-card-inactive { padding: 12px 16px; border-top: 1px solid #f1f5f9; background: #f8fafc; color: #64748b; font-size: 12px; font-weight: 600; }
 .shop-cell { display: flex; align-items: center; gap: 14px; }
 .shop-avatar { width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; flex-shrink: 0; }
 .shop-name { font-weight: 700; font-size: 15px; color: #0f172a; }
@@ -1021,8 +1083,26 @@ onMounted(() => {
 @media (max-width: 640px) {
   .form-grid { grid-template-columns: 1fr; }
   .form-grid .full { grid-column: span 1; }
-  .data-table { display: block; overflow-x: auto; }
+  .data-table { display: none; }
+  .mobile-shops { display: grid; gap: 12px; padding: 12px; background: #f8fafc; }
   .page-header { flex-direction: column; align-items: flex-start; }
+  .header-right { width: 100%; display: grid; grid-template-columns: 1fr; }
+  .search-input { width: 100%; min-width: 0; box-sizing: border-box; }
+  .header-right .btn-primary { width: 100%; }
+  .card { border: 0; border-radius: 14px; background: #f8fafc; box-shadow: none; }
+  .pagination { gap: 8px; padding: 14px 12px; }
+  .pagination .btn { min-width: 0; padding: 9px 12px; }
+  .page-info { font-size: 12px; white-space: nowrap; }
+  .modal-overlay { padding: 10px; }
+  .modal-card { max-height: calc(100vh - 20px); border-radius: 16px; }
+  .modal-header { padding: 16px; }
+  .modal-body { padding: 16px; }
+  .modal-footer { padding: 14px 16px 16px; }
+  .member-add-row { align-items: stretch; flex-direction: column; }
+  .member-role { max-width: none; }
+  .product-item { align-items: flex-start; gap: 12px; }
+  .product-info { min-width: 0; }
+  .product-meta { overflow-wrap: anywhere; }
 }
 .btn-icon.products { color: #0f766e; }
 .btn-icon.products:hover { background: #f0fdfa; border-color: #99f6e4; }

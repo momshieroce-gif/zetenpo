@@ -145,7 +145,8 @@ const search = async () => {
     const shopsSnap = await getDocs(collection(db, 'shops'));
     const results: ResultItem[] = [];
     for (const shopDoc of shopsSnap.docs) {
-      const shop = { id: shopDoc.id, ...shopDoc.data() } as Shop;
+      const shopData = shopDoc.data() as Omit<Shop, 'id'>;
+      const shop = Object.assign({ id: shopDoc.id }, shopData) as Shop;
       if (shop.deletedAt) continue;
       const d = getDistance(userLat.value, userLng.value, shop.latitude, shop.longitude);
       if (d > radius.value) continue;
@@ -157,8 +158,14 @@ const search = async () => {
         return data.name?.toLowerCase().includes(q) || (data.category || '').toLowerCase().includes(q);
       });
       if (matchedDoc) {
-        const product = { id: matchedDoc.id, ...matchedDoc.data() } as Product;
-        results.push({ ...product, distance: d, shopName: shop.name, storeLatitude: shop.latitude, storeLongitude: shop.longitude });
+        const productData = matchedDoc.data() as Omit<Product, 'id'>;
+        const product = Object.assign({ id: matchedDoc.id }, productData) as Product;
+        results.push(Object.assign({}, product, {
+          distance: d,
+          shopName: shop.name,
+          storeLatitude: shop.latitude,
+          storeLongitude: shop.longitude,
+        }) as ResultItem);
       }
     }
     results.sort((a, b) => a.distance - b.distance);

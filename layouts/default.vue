@@ -18,7 +18,7 @@
             <span>Home</span>
           </NuxtLink>
           <NuxtLink to="/find-shops" class="nav-link">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="currentColor"/><circle cx="12" cy="9" r="2.5" fill="#db2777"/></svg>
+            <svg width="23" height="23" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="currentColor"/><circle cx="12" cy="9" r="2.5" fill="#db2777"/></svg>
             <span>Find Shops</span>
           </NuxtLink>
           <NuxtLink to="/find-items" class="nav-link">

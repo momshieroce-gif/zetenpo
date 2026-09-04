@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { collection, doc, getDoc, getDocs, query, where } from '~/utils/firestoreLogger';
+import { collection, doc, documentId, getDoc, getDocs, query, where } from '~/utils/firestoreLogger';
 import type { Inventory, Product, ProductVariant, Shop } from '~/types';
 
 const route = useRoute();
@@ -11,13 +11,21 @@ const products = ref<Product[]>([]);
 const productIdsWithVariants = ref<Set<string>>(new Set());
 const variantsByProductId = ref<Record<string, ProductVariant[]>>({});
 const inventoryByVariantId = ref<Record<string, Inventory>>({});
+const loadedInventoryVariantIds = new Set<string>();
+const variantInventoryLoading = ref(false);
 const loading = ref(true);
 const page = ref(1);
 const pageSize = 10;
+const productSearch = ref('');
 const { cart, addToCart } = useCart();
 
-const totalPages = computed(() => Math.ceil(products.value.length / pageSize));
-const paginatedProducts = computed(() => products.value.slice((page.value - 1) * pageSize, page.value * pageSize));
+const filteredProducts = computed(() => {
+  const searchTerm = productSearch.value.trim().toLowerCase();
+  if (!searchTerm) return products.value;
+  return products.value.filter((product: Product) => product.name.toLowerCase().includes(searchTerm));
+});
+const totalPages = computed(() => Math.ceil(filteredProducts.value.length / pageSize));
+const paginatedProducts = computed(() => filteredProducts.value.slice((page.value - 1) * pageSize, page.value * pageSize));
 const showMultiShopModal = ref(false);
 const selectedProduct = ref<Product | null>(null);
 const selectedVariantId = ref('');
@@ -26,9 +34,50 @@ const selectedVariant = computed(() => selectedVariants.value.find((variant: Pro
 const selectedInventory = computed(() => selectedVariant.value ? inventoryByVariantId.value[selectedVariant.value.id] : null);
 const selectedAvailableQuantity = computed(() => Number(selectedInventory.value?.availableQuantity || 0));
 
-const openVariantPicker = (product: Product) => {
+watch(productSearch, () => {
+  page.value = 1;
+});
+
+const chunk = <T,>(items: T[], size: number): T[][] => {
+  return Array.from({ length: Math.ceil(items.length / size) }, (_, index) => {
+    return items.slice(index * size, (index + 1) * size);
+  });
+};
+
+const loadVariantInventory = async (product: Product) => {
+  const db = nuxtApp.$firebase?.db;
+  if (!db) return;
+
+  const variantIds = (variantsByProductId.value[product.id] || []).map((variant: ProductVariant) => variant.id);
+  const missingVariantIds = variantIds.filter((variantId: string) => !loadedInventoryVariantIds.has(variantId));
+  if (!missingVariantIds.length) return;
+
+  variantInventoryLoading.value = true;
+  try {
+    const snapshots = await Promise.all(chunk(missingVariantIds, 30).map((variantIdBatch) => {
+      return getDocs(query(
+        collection(db, 'inventory'),
+        where(documentId(), 'in', variantIdBatch)
+      ));
+    }));
+    const loadedInventory = { ...inventoryByVariantId.value };
+    snapshots.forEach((snapshot) => {
+      snapshot.docs.forEach((inventoryDoc) => {
+        const inventoryData = inventoryDoc.data() as Omit<Inventory, 'id'>;
+        loadedInventory[inventoryDoc.id] = { id: inventoryDoc.id, ...inventoryData };
+      });
+    });
+    inventoryByVariantId.value = loadedInventory;
+    missingVariantIds.forEach((variantId: string) => loadedInventoryVariantIds.add(variantId));
+  } finally {
+    variantInventoryLoading.value = false;
+  }
+};
+
+const openVariantPicker = async (product: Product) => {
   selectedProduct.value = product;
   selectedVariantId.value = '';
+  await loadVariantInventory(product);
 };
 
 const closeVariantPicker = () => {
@@ -64,45 +113,42 @@ const fetchData = async () => {
   loading.value = true;
   const db = nuxtApp.$firebase.db;
 
-  const shopDoc = await getDoc(doc(db, 'shops', shopId));
+  const productsQuery = query(
+    collection(db, 'products'),
+    where('shopId', '==', shopId),
+    where('isActive', '==', true)
+  );
+  const [shopDoc, snapshot] = await Promise.all([
+    getDoc(doc(db, 'shops', shopId)),
+    getDocs(productsQuery),
+  ]);
   if (shopDoc.exists()) {
     const shopData = shopDoc.data() as Omit<Shop, 'id'>;
     shop.value = { id: shopDoc.id, ...shopData };
   }
 
-  const q = query(
-    collection(db, 'products'),
-    where('shopId', '==', shopId),
-    where('isActive', '==', true)
-  );
-  const snapshot = await getDocs(q);
   const list: Product[] = [];
   snapshot.forEach((d) => {
     const data = d.data() as Product;
     list.push({ ...data, id: d.id });
   });
-  const variantResults = await Promise.all(list.map(async (product) => {
-    const variantsQuery = query(
+  const variantSnapshots = await Promise.all(chunk(list.map((product) => product.id), 30).map((productIdBatch) => {
+    return getDocs(query(
       collection(db, 'productVariants'),
-      where('productId', '==', product.id)
-    );
-    const variantsSnapshot = await getDocs(variantsQuery);
-    const variants = variantsSnapshot.docs.map((variantDoc) => {
+      where('productId', 'in', productIdBatch)
+    ));
+  }));
+  const variantResultsByProductId: Record<string, ProductVariant[]> = {};
+  variantSnapshots.forEach((variantsSnapshot) => {
+    variantsSnapshot.docs.forEach((variantDoc) => {
       const variantData = variantDoc.data() as Omit<ProductVariant, 'id'>;
-      return { id: variantDoc.id, ...variantData };
+      const variants = variantResultsByProductId[variantData.productId] || [];
+      variants.push({ id: variantDoc.id, ...variantData });
+      variantResultsByProductId[variantData.productId] = variants;
     });
-    return { productId: product.id, variants };
-  }));
-  variantsByProductId.value = Object.fromEntries(variantResults.map(({ productId, variants }) => [productId, variants]));
-  productIdsWithVariants.value = new Set(variantResults.filter(({ variants }) => variants.length > 0).map(({ productId }) => productId));
-  const variants = variantResults.flatMap((result) => result.variants);
-  const inventoryResults = await Promise.all(variants.map(async (variant) => {
-    const inventorySnapshot = await getDoc(doc(db, 'inventory', variant.id));
-    if (!inventorySnapshot.exists()) return null;
-    const inventoryData = inventorySnapshot.data() as Omit<Inventory, 'id'>;
-    return [variant.id, { id: inventorySnapshot.id, ...inventoryData }] as const;
-  }));
-  inventoryByVariantId.value = Object.fromEntries(inventoryResults.filter((entry): entry is readonly [string, Inventory] => entry !== null));
+  });
+  variantsByProductId.value = variantResultsByProductId;
+  productIdsWithVariants.value = new Set(Object.keys(variantResultsByProductId));
   products.value = list.filter((product) => productIdsWithVariants.value.has(product.id));
   loading.value = false;
 };
@@ -132,13 +178,24 @@ onMounted(fetchData);
 
     <div class="products-section">
       <div class="container">
-        <div class="section-title">Products <span class="count">({{ products.length }})</span></div>
+        <div class="products-heading">
+          <div class="section-title">Products <span class="count">({{ filteredProducts.length }})</span></div>
+          <div class="product-search" role="search">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
+              <path d="m16.5 16.5 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+            <label class="sr-only" for="shop-product-search">Search items by name</label>
+            <input id="shop-product-search" v-model="productSearch" type="search" placeholder="Search item name..." autocomplete="off" />
+            <button v-if="productSearch" type="button" aria-label="Clear search" title="Clear search" @click="productSearch = ''">&times;</button>
+          </div>
+        </div>
 
         <div v-if="loading" class="loading">Loading products...</div>
-        <div v-else-if="!products.length" class="empty-state">
+        <div v-else-if="!filteredProducts.length" class="empty-state">
           <div class="empty-icon">P</div>
-          <div class="empty-title">No products yet</div>
-          <div class="empty-desc">This shop has not listed any products.</div>
+          <div class="empty-title">{{ productSearch ? 'No matching items' : 'No products yet' }}</div>
+          <div class="empty-desc">{{ productSearch ? `No item name matches “${productSearch}”.` : 'This shop has not listed any products.' }}</div>
         </div>
         <div v-else class="products-grid">
           <div v-for="product in paginatedProducts" :key="product.id" class="product-card">
@@ -177,7 +234,8 @@ onMounted(fetchData);
           <button type="button" class="close-btn" aria-label="Close variant selection" @click="closeVariantPicker">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="variant-options" role="radiogroup" aria-label="Product variant">
+          <div v-if="variantInventoryLoading" class="variant-loading">Loading available options...</div>
+          <div v-else class="variant-options" role="radiogroup" aria-label="Product variant">
             <button
               v-for="variant in selectedVariants"
               :key="variant.id"
@@ -202,7 +260,7 @@ onMounted(fetchData);
         </div>
         <div class="modal-footer">
           <button type="button" class="modal-btn modal-btn-ghost" @click="closeVariantPicker">Cancel</button>
-          <button type="button" class="modal-btn modal-btn-primary" :disabled="!selectedVariant || selectedAvailableQuantity <= 0" @click="handleAddToCart">
+          <button type="button" class="modal-btn modal-btn-primary" :disabled="variantInventoryLoading || !selectedVariant || selectedAvailableQuantity <= 0" @click="handleAddToCart">
             Add selected variant
           </button>
         </div>
@@ -324,7 +382,81 @@ onMounted(fetchData);
   font-size: 22px;
   font-weight: 800;
   color: #1f2937;
+  margin: 0;
+}
+
+.products-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
   margin-bottom: 24px;
+}
+
+.product-search {
+  width: min(100%, 360px);
+  height: 44px;
+  padding: 0 10px 0 14px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  color: #6b7280;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+
+.product-search:focus-within {
+  color: #6d28d9;
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.14);
+}
+
+.product-search input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #111827;
+  font: inherit;
+  font-size: 14px;
+}
+
+.product-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.product-search button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #f3f4f6;
+  color: #6b7280;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.product-search button:hover {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .count {
@@ -547,6 +679,16 @@ onMounted(fetchData);
 
   .products-section {
     padding: 20px 16px;
+  }
+
+  .products-heading {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .product-search {
+    width: 100%;
   }
 
   .products-grid {

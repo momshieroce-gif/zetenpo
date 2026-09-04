@@ -41,7 +41,8 @@
       </div>
       <div v-else-if="fetchError" class="state error">{{ fetchError }}</div>
       <template v-else-if="filteredTransactions.length">
-        <table class="data-table">
+        <div class="table-scroll" role="region" aria-label="Shop transactions table" tabindex="0">
+          <table class="data-table">
           <thead>
             <tr>
               <th>Date & Time</th>
@@ -87,7 +88,77 @@
               </td>
             </tr>
           </tbody>
-        </table>
+          </table>
+        </div>
+        <div class="mobile-transactions" aria-label="Shop transactions">
+          <article v-for="tx in paginatedTransactions" :key="tx.id" class="transaction-card">
+            <div class="transaction-card-header">
+              <div class="transaction-heading">
+                <span class="transaction-order">{{ tx.order_number || 'Transaction' }}</span>
+                <span class="transaction-date">{{ formatDate(tx.createdAt) }}</span>
+              </div>
+              <span v-if="!canManageStatuses" class="badge" :class="statusClass(tx.status)">
+                <span class="dot"></span>
+                {{ displayStatus(tx.status) }}
+              </span>
+            </div>
+
+            <div class="transaction-shop-row">
+              <span class="shop-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l2-5h14l2 5"/><path d="M5 13v7h14v-7"/><path d="M9 20v-6h6v6"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/></svg>
+              </span>
+              <div>
+                <span class="mobile-label">Shop</span>
+                <strong>{{ shopMap[tx.store_id] || tx.store_id || '-' }}</strong>
+              </div>
+            </div>
+
+            <div class="transaction-card-grid">
+              <div class="transaction-field">
+                <span class="mobile-label">Customer Mobile</span>
+                <span>{{ tx.customer_mobile || '-' }}</span>
+              </div>
+              <div class="transaction-field">
+                <span class="mobile-label">Payment</span>
+                <span class="payment-value">{{ tx.payment_method || '-' }}</span>
+              </div>
+            </div>
+
+            <div v-if="canManageStatuses" class="mobile-status-field">
+              <label class="mobile-label" :for="`mobile-status-${tx.id}`">Status</label>
+              <select
+                :id="`mobile-status-${tx.id}`"
+                class="status-select"
+                :value="tx.status || 'pending'"
+                @change="handleStatusChange($event, tx)">
+                <option v-for="status in statusList" :key="status.slug" :value="status.slug">
+                  {{ status.name || displayStatus(status.slug) }}
+                </option>
+              </select>
+            </div>
+
+            <div class="transaction-card-footer">
+              <div class="transaction-total">
+                <span class="mobile-label">Total</span>
+                <strong>{{ formatTotal(tx) }}</strong>
+              </div>
+              <div class="transaction-card-actions">
+                <button
+                  class="mobile-action feedback"
+                  :title="(tx.status || '').toLowerCase() === 'completed' ? 'Feedback' : 'Feedback available only for completed orders'"
+                  :disabled="(tx.status || '').toLowerCase() !== 'completed'"
+                  @click="openFeedbackModal(tx)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
+                  <span>Feedback</span>
+                </button>
+                <button class="mobile-action view" @click="viewTransaction(tx)">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <span>View</span>
+                </button>
+              </div>
+            </div>
+          </article>
+        </div>
         <div v-if="totalPages > 1" class="pagination">
           <button class="btn btn-ghost" :disabled="currentPage === 1" @click="prevPage">Previous</button>
           <span class="page-info">Page {{ currentPage }} of {{ totalPages }}</span>
@@ -715,11 +786,40 @@ onMounted(() => {
 .empty-icon { width: 72px; height: 72px; border-radius: 50%; background: #f8fafc; color: #94a3b8; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
 .empty-title { font-size: 18px; font-weight: 800; color: #0f172a; margin: 0 0 4px; }
 .empty-desc { font-size: 14px; color: #64748b; margin: 0 0 20px; }
-.data-table { width: 100%; border-collapse: collapse; }
+.table-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+.table-scroll::-webkit-scrollbar { height: 8px; }
+.table-scroll::-webkit-scrollbar-track { background: transparent; }
+.table-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border: 2px solid #fff; border-radius: 8px; }
+.table-scroll:focus-visible { outline: 3px solid rgba(79,70,229,0.18); outline-offset: -3px; }
+.data-table { width: 100%; min-width: 980px; border-collapse: collapse; }
 .data-table th { text-align: left; padding: 14px 16px; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.6px; border-bottom: 1px solid #f1f5f9; background: #f8fafc; }
 .data-table td { padding: 16px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; font-size: 14px; color: #0f172a; }
 .data-table tbody tr:hover { background: #f8fafc; }
 .data-table tr:last-child td { border-bottom: none; }
+.mobile-transactions { display: none; }
+.transaction-card { overflow: hidden; background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 8px 24px rgba(15,23,42,0.06); }
+.transaction-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px; border-bottom: 1px solid #f1f5f9; background: #f8fafc; }
+.transaction-heading { min-width: 0; display: grid; gap: 4px; }
+.transaction-order { color: #0f172a; font-size: 14px; font-weight: 900; overflow-wrap: anywhere; }
+.transaction-date { color: #64748b; font-size: 12px; }
+.transaction-shop-row { display: grid; grid-template-columns: 36px 1fr; align-items: center; gap: 10px; padding: 16px 16px 12px; }
+.transaction-shop-row > div { min-width: 0; display: grid; gap: 3px; }
+.transaction-shop-row strong { color: #0f172a; font-size: 14px; overflow-wrap: anywhere; }
+.shop-icon { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; background: #eef2ff; color: #4f46e5; }
+.mobile-label { color: #94a3b8; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; }
+.transaction-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px 16px; }
+.transaction-field { min-width: 0; display: grid; gap: 4px; color: #334155; font-size: 13px; font-weight: 600; }
+.payment-value { text-transform: capitalize; }
+.mobile-status-field { display: grid; gap: 6px; padding: 0 16px 16px; }
+.mobile-status-field .status-select { min-width: 0; }
+.transaction-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-top: 1px solid #f1f5f9; background: #fcfcfd; }
+.transaction-total { display: grid; gap: 3px; }
+.transaction-total strong { color: #4f46e5; font-size: 18px; font-weight: 900; }
+.transaction-card-actions { display: flex; align-items: center; gap: 8px; }
+.mobile-action { min-height: 38px; padding: 0 12px; border: 1px solid transparent; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; font-weight: 800; cursor: pointer; }
+.mobile-action.feedback { color: #0f766e; background: #f0fdfa; border-color: #99f6e4; }
+.mobile-action.view { color: #4338ca; background: #eef2ff; border-color: #c7d2fe; }
+.mobile-action:disabled { opacity: 0.45; cursor: not-allowed; }
 .order-id { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-weight: 600; color: #0f172a; }
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; }
 .dot { width: 6px; height: 6px; border-radius: 50%; }
@@ -807,7 +907,28 @@ onMounted(() => {
 .total-row.grand { font-size: 16px; font-weight: 800; color: #0f172a; border-top: 1px solid #f1f5f9; padding-top: 12px; margin-top: 8px; }
 @media (max-width: 640px) {
   .filters-bar { grid-template-columns: 1fr; }
-  .data-table { display: block; overflow-x: auto; }
+  .table-scroll { display: none; }
+  .mobile-transactions { display: grid; gap: 12px; padding: 12px; background: #f8fafc; }
   .page-header { flex-direction: column; align-items: flex-start; }
+  .card { border: 0; border-radius: 14px; background: #f8fafc; box-shadow: none; }
+  .pagination { gap: 8px; padding: 14px 12px; }
+  .pagination .btn { min-width: 0; padding: 9px 12px; }
+  .page-info { font-size: 12px; white-space: nowrap; }
+  .modal-overlay { padding: 10px; }
+  .modal-card { max-height: calc(100vh - 20px); border-radius: 16px; }
+  .modal-header { padding: 16px; }
+  .modal-body { padding: 16px; }
+  .detail-grid { grid-template-columns: 1fr; }
+  .detail-item.full { grid-column: auto; }
+  .detail-value { overflow-wrap: anywhere; }
+  .status-select { min-width: 0; }
+  .items-table { display: block; overflow-x: auto; }
+}
+
+@media (max-width: 420px) {
+  .transaction-card-header,
+  .transaction-card-footer { align-items: stretch; flex-direction: column; }
+  .transaction-card-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .mobile-action { width: 100%; }
 }
 </style>

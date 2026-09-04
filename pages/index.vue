@@ -17,7 +17,7 @@
           <h1 class="hero-title">Shop Local,<br><span class="hero-title-accent">Live Better</span></h1>
           <p class="hero-subtitle">Connect with hundreds of trusted local shops in your area. Get fresh products, great prices, and lightning-fast delivery — all in one place.</p>
           <div class="hero-actions">
-            <NuxtLink to="/find-shops" class="btn hero-btn hero-btn-primary"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#1a1a1a"/><circle cx="12" cy="9" r="2.5" fill="#db2777"/></svg><span>Shops Near Me</span></NuxtLink>
+            <NuxtLink to="/find-shops" class="btn hero-btn hero-btn-primary"><svg width="23" height="23" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#1a1a1a"/><circle cx="12" cy="9" r="2.5" fill="#db2777"/></svg><span>Shops Near Me</span></NuxtLink>
             <NuxtLink to="/find-items" class="btn hero-btn hero-btn-secondary"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 001.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 00-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.5 6.5 0 005.34-1.48l.27.28v.79l4.25 4.25c.49.49 1.28.49 1.77 0l.78-.78c.49-.49.49-1.28 0-1.77L15.5 14zM9.5 14C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" fill="currentColor"/></svg><span>Search Items</span></NuxtLink>
           </div>
           <div class="hero-trust">
