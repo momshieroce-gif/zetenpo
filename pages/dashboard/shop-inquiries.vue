@@ -52,6 +52,35 @@
             </tr>
           </tbody>
         </table>
+        <div class="mobile-inquiry-list">
+          <article v-for="c in paginatedChats" :key="c.id" class="mobile-inquiry-item" @click="openChat(c)">
+            <div class="mobile-inquiry-top">
+              <div class="inquiry-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.5 8.5 8.5 0 0 1-4.1-1.05L3 20l1.05-4.9A8.5 8.5 0 1 1 21 11.5z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg>
+              </div>
+              <div class="mobile-inquiry-heading">
+                <span class="mobile-label">Product inquiry</span>
+                <NuxtLink v-if="c.productId" :to="`/items/${c.productId}`" class="mobile-entity-link" @click.stop>{{ productMap[c.productId] || c.title || 'Inquiry' }}</NuxtLink>
+                <strong v-else>{{ productMap[c.productId] || c.title || 'Inquiry' }}</strong>
+              </div>
+              <time>{{ formatDate(c.createdAt) }}</time>
+            </div>
+            <div class="mobile-shop-row">
+              <span>Shop</span>
+              <NuxtLink v-if="c.shopId" :to="`/shops/${c.shopId}`" class="mobile-entity-link" @click.stop>{{ shopMap[c.shopId] || '-' }}</NuxtLink>
+              <strong v-else>-</strong>
+            </div>
+            <div class="mobile-inquiry-actions">
+              <button class="mobile-open-btn" @click.stop="openChat(c)">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.5 8.5 8.5 0 0 1-4.1-1.05L3 20l1.05-4.9A8.5 8.5 0 1 1 21 11.5z"/></svg>
+                Open messages
+              </button>
+              <button class="mobile-delete-btn" title="Delete inquiry" aria-label="Delete inquiry" @click.stop="deleteChat(c)">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg>
+              </button>
+            </div>
+          </article>
+        </div>
         <div v-if="totalPages > 1" class="pagination">
           <button class="btn btn-ghost" :disabled="currentPage === 1" @click="prevPage">Previous</button>
           <span class="page-info">Page {{ currentPage }} of {{ totalPages }}</span>
@@ -478,6 +507,7 @@ const deleteMessage = async (m: Message) => {
 .data-table td { padding: 16px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; font-size: 14px; color: #0f172a; }
 .data-table tbody tr:hover { background: #f8fafc; }
 .data-table tr:last-child td { border-bottom: none; }
+.mobile-inquiry-list { display: none; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; font-weight: 700; font-size: 14px; border: none; cursor: pointer; transition: all 0.2s; }
 .btn-ghost { padding: 10px 18px; background: #f1f5f9; color: #475569; }
 .btn-action { display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; border-radius: 10px; font-size: 13px; font-weight: 700; border: 1px solid transparent; cursor: pointer; transition: all 0.2s; margin-left: 6px; }
@@ -567,7 +597,59 @@ const deleteMessage = async (m: Message) => {
 .form-row label { font-weight: 700; color: #64748b; font-size: 12px; }
 
 @media (max-width: 640px) {
-  .data-table { display: block; overflow-x: auto; }
-  .page-header { flex-direction: column; align-items: flex-start; }
+  .inquiries-page { width: 100%; }
+  .page-header { margin-bottom: 20px; }
+  .header-left { gap: 12px; align-items: flex-start; }
+  .header-icon { width: 44px; height: 44px; flex: 0 0 44px; border-radius: 10px; }
+  .header-icon svg { width: 23px; height: 23px; }
+  .page-title { font-size: 24px; }
+  .page-subtitle { font-size: 13px; line-height: 1.45; }
+  .card { border-radius: 12px; box-shadow: 0 6px 24px rgba(15,23,42,0.06); }
+  .data-table { display: none; }
+  .mobile-inquiry-list { display: grid; }
+  .mobile-inquiry-item { padding: 18px; border-bottom: 1px solid #e2e8f0; cursor: pointer; }
+  .mobile-inquiry-item:last-child { border-bottom: none; }
+  .mobile-inquiry-top { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 11px; align-items: center; }
+  .inquiry-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; color: #4f46e5; background: #eef2ff; }
+  .mobile-inquiry-heading { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .mobile-label { color: #94a3b8; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0; }
+  .mobile-inquiry-heading strong, .mobile-entity-link { color: #0f172a; font-size: 14px; font-weight: 800; line-height: 1.3; overflow-wrap: anywhere; text-decoration: none; }
+  .mobile-inquiry-heading .mobile-entity-link { color: #4338ca; }
+  .mobile-inquiry-top time { grid-column: 2; color: #64748b; font-size: 11px; }
+  .mobile-shop-row { display: flex; align-items: center; gap: 8px; margin: 15px 0; padding: 11px 12px; border-radius: 8px; background: #f8fafc; min-width: 0; }
+  .mobile-shop-row > span { color: #94a3b8; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+  .mobile-shop-row .mobile-entity-link, .mobile-shop-row strong { min-width: 0; color: #334155; font-size: 13px; overflow-wrap: anywhere; }
+  .mobile-inquiry-actions { display: grid; grid-template-columns: minmax(0, 1fr) 42px; gap: 9px; }
+  .mobile-open-btn, .mobile-delete-btn { height: 42px; border: 0; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+  .mobile-open-btn { gap: 8px; background: #4f46e5; color: #fff; font-size: 13px; font-weight: 800; }
+  .mobile-delete-btn { background: #fee2e2; color: #b91c1c; }
+  .pagination { gap: 8px; padding: 14px; }
+  .pagination .btn { padding: 9px 12px; font-size: 12px; }
+  .page-info { font-size: 12px; white-space: nowrap; }
+  .state { padding: 36px 20px; }
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal-card { display: flex; flex-direction: column; max-width: none; height: min(92vh, 760px); max-height: 92vh; border-radius: 16px 16px 0 0; overflow: hidden; }
+  .confirm-card { height: auto; max-width: none; }
+  .modal-header { flex: 0 0 auto; gap: 12px; padding: 16px 18px; }
+  .modal-header h3 { min-width: 0; font-size: 16px; line-height: 1.35; }
+  .modal-header .entity-link { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+  .modal-sub { display: block; margin: 6px 0 0; }
+  .close-btn { flex: 0 0 36px; width: 36px; height: 36px; }
+  .modal-body { min-height: 0; display: flex; flex: 1; flex-direction: column; padding: 14px; }
+  .messages-list { flex: 1; max-height: none; min-height: 0; margin-bottom: 14px; }
+  .message-row { padding: 12px; }
+  .message-meta { flex-direction: column; gap: 2px; padding-right: 0; }
+  .message-text { overflow-wrap: anywhere; }
+  .message-actions { position: static; justify-content: flex-end; margin-top: 4px; }
+  .message-actions .btn-icon { width: auto; height: 32px; padding: 0 9px; margin-left: 0; font-size: 11px; }
+  .message-attachment img { width: 100%; max-width: 100%; }
+  .message-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+  .message-form input { grid-column: 1 / -1; width: 100%; min-width: 0; box-sizing: border-box; }
+  .message-form .attachments { margin-left: 0 !important; min-width: 0; flex-wrap: wrap; }
+  .attachment-previews { width: 100%; flex-wrap: wrap; }
+  .message-form .btn-action { min-height: 40px; margin-left: 0; }
+  .message-form .btn-action.cancel { grid-column: 1 / -1; }
+  .confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 14px 18px 20px; }
+  .confirm-actions .btn { width: 100%; margin: 0; }
 }
 </style>

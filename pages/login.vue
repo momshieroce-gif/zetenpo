@@ -93,6 +93,20 @@ const showPassword = ref(false);
 const loading = ref(false);
 const error = ref('');
 
+const getEmailSignInErrorMessage = (signInError: any) => {
+  const invalidCredentialCodes = [
+    'auth/invalid-credential',
+    'auth/invalid-email',
+    'auth/user-not-found',
+    'auth/wrong-password',
+  ];
+
+  if (invalidCredentialCodes.includes(signInError?.code)) return 'Invalid email or password.';
+  if (signInError?.code === 'auth/too-many-requests') return 'Too many sign-in attempts. Please try again later.';
+  if (!signInError?.code && signInError?.message) return signInError.message;
+  return 'Sign in failed. Please try again.';
+};
+
 const hashPassword = async (password: string) => {
   const cryptoObj = (globalThis as any).crypto;
   const buf = await cryptoObj.subtle.digest('SHA-256', new TextEncoder().encode(password));
@@ -129,7 +143,7 @@ const signIn = async () => {
     await router.push(redirectPath);
   } catch (e: any) {
     await logUserAuthActivity('login', 'error', { method: 'email-password', message: e?.message || 'Sign in failed.' });
-    error.value = e?.message || 'Sign in failed. Please try again.';
+    error.value = getEmailSignInErrorMessage(e);
   } finally {
     loading.value = false;
   }

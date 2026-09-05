@@ -48,6 +48,32 @@
             </tr>
           </tbody>
         </table>
+        <div class="mobile-user-list">
+          <article v-for="user in paginatedUsers" :key="user.id" class="mobile-user-item">
+            <div class="mobile-user-header">
+              <div class="user-avatar">{{ userInitials(user) }}</div>
+              <div class="mobile-user-identity">
+                <h2>{{ user.name || user.displayName || 'Unnamed user' }}</h2>
+                <p>{{ user.email || 'No email address' }}</p>
+              </div>
+              <span class="badge" :class="activeClass(user.isActive)">
+                <span class="dot"></span>
+                {{ activeLabel(user.isActive) }}
+              </span>
+            </div>
+            <dl class="mobile-user-details">
+              <div>
+                <dt>Phone</dt>
+                <dd>{{ user.phone || '-' }}</dd>
+              </div>
+              <div>
+                <dt>Role</dt>
+                <dd>{{ user.role || '-' }}</dd>
+              </div>
+            </dl>
+            <button class="btn-sm btn-edit mobile-edit" @click="openEdit(user)">Edit user</button>
+          </article>
+        </div>
         <div v-if="totalPages > 1" class="pagination">
           <button class="btn btn-ghost" :disabled="currentPage === 1" @click="prevPage">Previous</button>
           <span class="page-info">Page {{ currentPage }} of {{ totalPages }}</span>
@@ -249,6 +275,16 @@ const saveUser = async () => {
 
 const activeLabel = (value?: boolean) => (value !== false ? 'Active' : 'Inactive');
 const activeClass = (value?: boolean) => (value !== false ? 'badge-success' : 'badge-inactive');
+const userInitials = (user: User) => {
+  const label = user.name || user.displayName || user.email || 'U';
+  return label
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+};
 
 const toggleActive = async (user: User) => {
   const newActive = !(user.isActive ?? true);
@@ -359,6 +395,7 @@ onMounted(() => {
 .data-table td { padding: 16px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; font-size: 14px; color: #0f172a; }
 .data-table tbody tr:hover { background: #f8fafc; }
 .data-table tr:last-child td { border-bottom: none; }
+.mobile-user-list { display: none; }
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; }
 .dot { width: 6px; height: 6px; border-radius: 50%; }
 .badge-success { background: #dcfce7; color: #166534; }
@@ -395,7 +432,39 @@ onMounted(() => {
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .edit-error { color: #ef4444; font-size: 13px; font-weight: 600; }
 @media (max-width: 640px) {
-  .data-table { display: block; overflow-x: auto; }
-  .page-header { flex-direction: column; align-items: flex-start; }
+  .users-page { width: 100%; }
+  .page-header { margin-bottom: 20px; }
+  .header-left { gap: 12px; }
+  .header-icon { width: 44px; height: 44px; border-radius: 10px; }
+  .header-icon svg { width: 23px; height: 23px; }
+  .page-title { font-size: 24px; }
+  .page-subtitle { font-size: 13px; }
+  .card { border-radius: 12px; box-shadow: 0 6px 24px rgba(15,23,42,0.06); }
+  .data-table { display: none; }
+  .mobile-user-list { display: grid; }
+  .mobile-user-item { padding: 18px; border-bottom: 1px solid #e2e8f0; }
+  .mobile-user-item:last-child { border-bottom: none; }
+  .mobile-user-header { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 12px; align-items: center; }
+  .user-avatar { width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center; background: #eef2ff; color: #4338ca; font-size: 13px; font-weight: 800; }
+  .mobile-user-identity { min-width: 0; }
+  .mobile-user-identity h2 { margin: 0 0 3px; color: #0f172a; font-size: 15px; line-height: 1.25; overflow-wrap: anywhere; }
+  .mobile-user-identity p { margin: 0; color: #64748b; font-size: 12px; overflow-wrap: anywhere; }
+  .mobile-user-header .badge { grid-column: 2; justify-self: start; padding: 4px 9px; }
+  .mobile-user-details { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin: 16px 0; padding: 13px; background: #f8fafc; border-radius: 8px; }
+  .mobile-user-details div { min-width: 0; }
+  .mobile-user-details dt { margin-bottom: 4px; color: #94a3b8; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0; }
+  .mobile-user-details dd { margin: 0; color: #334155; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+  .mobile-edit { width: 100%; margin: 0; padding: 10px 14px; }
+  .pagination { gap: 10px; padding: 14px; }
+  .pagination .btn { padding: 9px 12px; font-size: 12px; }
+  .page-info { font-size: 12px; white-space: nowrap; }
+  .state { padding: 36px 20px; }
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal-card { max-height: 92vh; border-radius: 16px 16px 0 0; }
+  .modal-header { padding: 18px 20px; }
+  .modal-body { padding: 20px; }
+  .edit-grid { grid-template-columns: 1fr; }
+  .form-group.full { grid-column: auto; }
+  .modal-actions { display: grid; grid-template-columns: 1fr 1fr; }
 }
 </style>

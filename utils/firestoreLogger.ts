@@ -31,6 +31,22 @@ type LogPayload = {
 
 const recentLogKeys = new Map<string, number>();
 const LOG_DEDUPE_WINDOW_MS = 1500;
+const claimedRouteMinutes = new Set<string>();
+
+function getRouteMinuteKey(uid: string | null, routePath: string | null, timestamp: number): string | null {
+  if (!uid || !routePath) return null;
+  return `${uid}|${routePath}|${Math.floor(timestamp / 60000)}`;
+}
+
+function claimRouteMinute(uid: string | null, routePath: string | null, timestamp: number): boolean {
+  const key = getRouteMinuteKey(uid, routePath, timestamp);
+  if (!key) return true;
+  if (claimedRouteMinutes.has(key)) return false;
+
+  claimedRouteMinutes.clear();
+  claimedRouteMinutes.add(key);
+  return true;
+}
 
 function getLogKey(payload: LogPayload, uid: string | null, routePath: string | null): string {
   return [
@@ -78,6 +94,30 @@ function isUserLogsPath(path: string): boolean {
   return path.split('/')[0] === 'userLogs';
 }
 
+async function isSameAsPreviousUserLog(
+  db: any,
+  uid: string | null,
+  routePath: string | null,
+  clientCreatedAt: number
+): Promise<boolean> {
+  if (!uid || !routePath) return false;
+
+  const latestLogQuery = query(
+    fbCollection(db, 'userLogs'),
+    where('uid', '==', uid),
+    orderBy('createdAt', 'desc'),
+    limit(1)
+  );
+  const snapshot = await fbGetDocs(latestLogQuery);
+  const previousLog = snapshot.docs[0]?.data();
+  if (!previousLog) return false;
+
+  const previousClientCreatedAt = Number(previousLog.clientCreatedAt);
+  return previousLog.routePath === routePath
+    && Number.isFinite(previousClientCreatedAt)
+    && Math.floor(previousClientCreatedAt / 60000) === Math.floor(clientCreatedAt / 60000);
+}
+
 async function writeUserLog(payload: LogPayload): Promise<void> {
   try {
     const nuxtApp = useNuxtApp() as any;
@@ -90,9 +130,16 @@ async function writeUserLog(payload: LogPayload): Promise<void> {
     const uid = authStore.user?.uid || auth?.currentUser?.uid || null;
     const email = authStore.user?.email || auth?.currentUser?.email || null;
     const routePath = route?.fullPath || null;
+    const clientCreatedAt = Date.now();
 
     const dedupeKey = getLogKey(payload, uid, routePath);
     if (shouldSkipDuplicateLog(dedupeKey)) {
+      return;
+    }
+    if (!claimRouteMinute(uid, routePath, clientCreatedAt)) {
+      return;
+    }
+    if (await isSameAsPreviousUserLog(db, uid, routePath, clientCreatedAt)) {
       return;
     }
 
@@ -107,7 +154,7 @@ async function writeUserLog(payload: LogPayload): Promise<void> {
       routePath,
       userAgent: process.client ? navigator.userAgent : null,
       createdAt: serverTimestamp(),
-      clientCreatedAt: Date.now(),
+      clientCreatedAt,
     });
   } catch {
     // Logging must never block user actions.
