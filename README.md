@@ -51,7 +51,7 @@ npm run preview
 | Variable | Description |
 | --- | --- |
 | `NUXT_PUBLIC_FIREBASE_API_KEY` | Firebase Web API key |
-| `NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Firebase-provided Auth domain (for example, `your-project.firebaseapp.com`), not the app's custom domain |
+| `NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Production auth domain. Use `mynearshops.com`, whose `/__/auth/*` routes proxy to Firebase Hosting |
 | `NUXT_PUBLIC_FIREBASE_PROJECT_ID` | Firebase project ID |
 | `NUXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Firebase Storage bucket |
 | `NUXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Firebase messaging sender ID |
@@ -102,7 +102,7 @@ mynearshops/
 - The map pages render client-only inside `<ClientOnly>` to avoid SSR issues with the Google Maps JS API.
 - The dashboard route uses a client-only auth middleware because Firebase session restoration happens in the browser.
 - `useHead` is used on every public page for SEO.
-- Add every production app hostname to Firebase Console > Authentication > Settings > Authorized domains. Keep `NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN` set to the Firebase-provided domain unless the custom domain serves Firebase Hosting's reserved `/__/auth/*` routes.
+- Add every production app hostname to Firebase Console > Authentication > Settings > Authorized domains. The server routes under `server/routes/__/` proxy Firebase's reserved auth helpers, allowing `NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN=mynearshops.com` in production.
 
 ## License
 
