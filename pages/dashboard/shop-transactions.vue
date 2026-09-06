@@ -77,8 +77,8 @@
               <td class="actions">
                 <button
                   class="btn-action feedback"
-                  :title="(tx.status || '').toLowerCase() === 'completed' ? 'Feedback' : 'Feedback available only for completed orders'"
-                  :disabled="(tx.status || '').toLowerCase() !== 'completed'"
+                  :title="feedbackAvailabilityTitle(tx)"
+                  :disabled="!canSubmitFeedback(tx)"
                   @click="openFeedbackModal(tx)">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
                 </button>
@@ -145,8 +145,8 @@
               <div class="transaction-card-actions">
                 <button
                   class="mobile-action feedback"
-                  :title="(tx.status || '').toLowerCase() === 'completed' ? 'Feedback' : 'Feedback available only for completed orders'"
-                  :disabled="(tx.status || '').toLowerCase() !== 'completed'"
+                  :title="feedbackAvailabilityTitle(tx)"
+                  :disabled="!canSubmitFeedback(tx)"
                   @click="openFeedbackModal(tx)">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
                   <span>Feedback</span>
@@ -523,6 +523,14 @@ const displayStatus = (status?: string) => {
   return statusMap.value[status]?.name || humanize(status);
 };
 
+const canSubmitFeedback = (tx: Transaction) =>
+  authStore.user?.roleId === 'customer' && (tx.status || '').toLowerCase() === 'completed';
+
+const feedbackAvailabilityTitle = (tx: Transaction) => {
+  if (authStore.user?.roleId !== 'customer') return 'Feedback is available only for customers';
+  return canSubmitFeedback(tx) ? 'Feedback' : 'Feedback available only for completed orders';
+};
+
 
 const updateTransactionStatus = async (tx: Transaction | null, status: string) => {
   if (!tx?.id || !status || !canManageStatuses.value) return;
@@ -571,6 +579,8 @@ const closeViewModal = () => {
 };
 
 const openFeedbackModal = async (tx: Transaction) => {
+  if (!canSubmitFeedback(tx)) return;
+
   selectedTransactionForFeedback.value = tx;
   feedbackMessage.value = '';
   feedbackRating.value = 5;

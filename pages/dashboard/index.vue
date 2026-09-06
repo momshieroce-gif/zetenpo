@@ -71,7 +71,7 @@
             <div class="action-title">Manage Users</div>
             <div class="action-desc">Assign roles and permissions</div>
           </NuxtLink>
-          <NuxtLink to="/dashboard/transactions" class="action-card">
+          <NuxtLink to="/dashboard/shop-transactions" class="action-card">
             <div class="action-icon amber">R</div>
             <div class="action-title">Reports</div>
             <div class="action-desc">View sales and analytics</div>
