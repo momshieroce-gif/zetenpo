@@ -119,7 +119,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { signOut } from 'firebase/auth';
-import { logUserAuthActivity } from '~/utils/firestoreLogger';
 
 const authStore = useAuthStore();
 const { $firebase } = useNuxtApp() as any;
@@ -140,12 +139,10 @@ const handleLogout = () => { showLogoutDialog.value = true; };
 const confirmLogout = async () => {
   try {
     await signOut($firebase.auth);
-    await logUserAuthActivity('logout', 'success', { source: 'default-layout' });
     authStore.logout();
     showLogoutDialog.value = false;
     await navigateTo('/');
-  } catch (e: any) {
-    await logUserAuthActivity('logout', 'error', { source: 'default-layout', message: e?.message || 'Logout failed.' });
+  } catch {
     // ignore
   }
 };

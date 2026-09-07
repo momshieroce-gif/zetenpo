@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where } from '~/utils/firestoreLogger';
+import { addDoc, collection, doc, documentId, getDoc, getDocs, query, serverTimestamp, setDoc, where } from '~/utils/firestoreLogger';
 import type { Inventory, Product, ProductVariant, Shop } from '~/types';
 
 const route = useRoute();
@@ -42,34 +42,45 @@ const fetchData = async () => {
   if (productDoc.exists()) {
     const productData = productDoc.data() as Omit<Product, 'id'>;
     product.value = { id: productDoc.id, ...productData };
-    if (product.value?.shopId) {
-      const shopDoc = await getDoc(doc(db, 'shops', product.value.shopId));
-      if (shopDoc.exists()) {
-        const shopData = shopDoc.data() as Omit<Shop, 'id'>;
-        shop.value = { id: shopDoc.id, ...shopData };
-      }
-    }
+
     const variantsQuery = query(collection(db, 'productVariants'), where('productId', '==', productId));
-    const variantsSnapshot = await getDocs(variantsQuery);
+    const [shopDoc, variantsSnapshot] = await Promise.all([
+      product.value.shopId ? getDoc(doc(db, 'shops', product.value.shopId)) : Promise.resolve(null),
+      getDocs(variantsQuery),
+    ]);
+
+    if (shopDoc?.exists()) {
+      const shopData = shopDoc.data() as Omit<Shop, 'id'>;
+      shop.value = { id: shopDoc.id, ...shopData };
+    }
+
     variants.value = variantsSnapshot.docs.map((variantDoc: any) => ({
       id: variantDoc.id,
       ...variantDoc.data(),
     })) as ProductVariant[];
 
-    const inventoryEntries: Array<readonly [string, Inventory] | null> = await Promise.all(variants.value.map(async (variant: ProductVariant) => {
-      const inventoryDoc = await getDoc(doc(db, 'inventory', variant.id));
-      if (!inventoryDoc.exists()) return null;
-      const inventoryData = inventoryDoc.data() as Omit<Inventory, 'id'>;
-      return [variant.id, { id: inventoryDoc.id, ...inventoryData }] as const;
-    }));
-    const availableInventoryEntries = inventoryEntries.filter((entry): entry is readonly [string, Inventory] => entry !== null);
-    inventoryByVariantId.value = Object.fromEntries(availableInventoryEntries);
+    const variantIds = variants.value.map((variant: ProductVariant) => variant.id);
+    const inventoryQueries = [];
+    for (let index = 0; index < variantIds.length; index += 30) {
+      inventoryQueries.push(getDocs(query(
+        collection(db, 'inventory'),
+        where(documentId(), 'in', variantIds.slice(index, index + 30))
+      )));
+    }
+    const inventorySnapshots = await Promise.all(inventoryQueries);
+    inventoryByVariantId.value = Object.fromEntries(inventorySnapshots.flatMap((snapshot: any) => (
+      snapshot.docs.map((inventoryDoc: any) => [
+        inventoryDoc.id,
+        { id: inventoryDoc.id, ...inventoryDoc.data() } as Inventory,
+      ])
+    )));
+
     const requestedVariantId = typeof route.query.variant === 'string' ? route.query.variant : '';
     const requestedVariant = variants.value.find((variant: ProductVariant) => variant.id === requestedVariantId);
     selectedVariantId.value = requestedVariant?.id || variants.value.find((variant: ProductVariant) => {
       return Number(inventoryByVariantId.value[variant.id]?.availableQuantity || 0) > 0;
     })?.id || variants.value[0]?.id || '';
-    await fetchFeedbacks();
+    void fetchFeedbacks();
   }
   loading.value = false;
 };
@@ -396,6 +407,13 @@ onMounted(fetchData);
         </div>
       </div>
     </div>
+
+    <Transition name="cart-confirmation">
+      <div v-if="added" class="cart-confirmation" role="status" aria-live="polite">
+        <span class="cart-confirmation-icon" aria-hidden="true">✓</span>
+        <span>Item added to your cart</span>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -759,6 +777,48 @@ onMounted(fetchData);
 .modal-btn-primary:hover { background: #d97706; }
 .modal-btn-ghost { background: transparent; color: #64748b; }
 .modal-btn-ghost:hover { background: #f1f5f9; }
+
+.cart-confirmation {
+  position: fixed;
+  left: 50%;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 12px 18px;
+  border: 1px solid #d1fae5;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #166534;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2);
+  font-size: 14px;
+  font-weight: 800;
+  transform: translateX(-50%);
+}
+
+.cart-confirmation-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.cart-confirmation-enter-active,
+.cart-confirmation-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.cart-confirmation-enter-from,
+.cart-confirmation-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 12px);
+}
 
 .product-reviews { max-width: 1200px; margin: 20px auto 0; padding: 0 24px 40px; }
 .reviews-shell {

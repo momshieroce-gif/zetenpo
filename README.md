@@ -46,6 +46,34 @@ npm run build
 npm run preview
 ```
 
+## Android App
+
+The Android app uses Capacitor and the application ID `com.mynearshops.app`. The normal web build remains SSR; Android builds use a client-side static Nuxt bundle.
+
+Prerequisites:
+
+- Android Studio with the Android SDK installed
+- A compatible JDK configured in Android Studio
+- An emulator or Android device with USB debugging enabled
+
+Generate the Nuxt bundle and synchronize it with the native project:
+
+```bash
+npm run android:sync
+```
+
+Open the project in Android Studio, then select a device and run the `app` configuration:
+
+```bash
+npm run android:open
+```
+
+After changing Vue, Nuxt, or web assets, run `npm run android:sync` again before rebuilding the Android app. `npm run android:run` performs the sync and launches through the Capacitor CLI when the Android SDK tools are available on `PATH`.
+
+For Android builds, set `NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN` to the Firebase-hosted domain (for example, `<project-id>.firebaseapp.com`) because the packaged app cannot use this repository's Nuxt server proxy routes. Add the relevant domain in Firebase Authentication settings and configure the Google Maps API key for Android/WebView use.
+
+Email/password authentication works through the Firebase web SDK. Google login currently uses `signInWithPopup`, which is not reliable in an Android WebView; native Google authentication or a redirect/deep-link flow is required before relying on Google login in the Android release.
+
 ## Environment Variables
 
 | Variable | Description |

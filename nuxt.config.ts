@@ -1,7 +1,9 @@
+const isCapacitorBuild = process.env.CAPACITOR === 'true';
+
 export default defineNuxtConfig({
   devtools: { enabled: true },
   telemetry: { enabled: false },
-  ssr: true,
+  ssr: !isCapacitorBuild,
   modules: ['@pinia/nuxt'],
   runtimeConfig: {
     public: {

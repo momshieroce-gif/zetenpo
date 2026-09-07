@@ -23,10 +23,10 @@
           <thead>
             <tr>
               <th>Date & Time</th>
+              <th>ETA</th>
               <th>Shop</th>
               <th>Customer Mobile</th>
               <th>Total</th>
-              <th>Payment Method</th>
               <th>Status</th>
               <th class="actions">Actions</th>
             </tr>
@@ -34,10 +34,18 @@
           <tbody>
             <tr v-for="tx in paginatedTransactions" :key="tx.id">
               <td>{{ formatDate(tx.createdAt) }}</td>
+              <td>
+                <div class="delivery-time-badge" :class="{ scheduled: tx.delivery_timing === 'scheduled' }">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                  <span>
+                    <small>{{ deliveryTimeLabel(tx) }}</small>
+                    <strong>{{ formatDeliveryTime(tx) }}</strong>
+                  </span>
+                </div>
+              </td>
               <td>{{ shopMap[tx.store_id] || tx.store_id || '-' }}</td>
               <td>{{ tx.customer_mobile || '-' }}</td>
               <td>{{ formatTotal(tx) }}</td>
-              <td>{{ tx.payment_method || '-' }}</td>
               <td>
                 <span class="badge" :class="statusClass(tx.status)">
                   <span class="dot"></span>
@@ -79,6 +87,16 @@
               <div>
                 <span class="mobile-label">Shop</span>
                 <strong>{{ shopMap[tx.store_id] || tx.store_id || '-' }}</strong>
+              </div>
+            </div>
+
+            <div class="mobile-delivery-time">
+              <div class="delivery-time-badge" :class="{ scheduled: tx.delivery_timing === 'scheduled' }">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                <span>
+                  <small>{{ deliveryTimeLabel(tx) }}</small>
+                  <strong>{{ formatDeliveryTime(tx) }}</strong>
+                </span>
               </div>
             </div>
 
@@ -162,6 +180,13 @@
             <div class="detail-item">
               <span class="detail-label">Delivery Method</span>
               <span class="detail-value">{{ selectedTransaction.delivery_method || '-' }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">{{ deliveryTimeLabel(selectedTransaction) }}</span>
+              <span class="detail-value delivery-detail-time">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                {{ formatDeliveryTime(selectedTransaction) }}
+              </span>
             </div>
             <div class="detail-item">
               <span class="detail-label">Customer Mobile</span>
@@ -327,6 +352,10 @@ interface Transaction {
   store_location?: { latitude?: number; longitude?: number };
   delivery_location?: { latitude?: number; longitude?: number; address?: string };
   delivery_method?: string;
+  delivery_timing?: 'estimated' | 'scheduled';
+  estimated_arrival?: any;
+  requested_delivery_at?: any;
+  estimated_duration_minutes?: number;
   payment_method?: string;
   items?: any[];
   subtotal?: number;
@@ -396,6 +425,24 @@ const formatDate = (value: any) => {
   if (!date) return '-';
   return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
 };
+
+const formatDeliveryTime = (transaction: Transaction) => {
+  const savedTime = transaction.delivery_timing === 'scheduled'
+    ? transaction.requested_delivery_at
+    : transaction.estimated_arrival;
+  const savedDate = toDate(savedTime);
+  if (savedDate) return formatDate(savedDate);
+
+  const createdDate = toDate(transaction.createdAt);
+  const durationMinutes = Number(transaction.estimated_duration_minutes);
+  if (!createdDate || !Number.isFinite(durationMinutes)) return '-';
+
+  return formatDate(new Date(createdDate.getTime() + durationMinutes * 60_000));
+};
+
+const deliveryTimeLabel = (transaction: Transaction) => (
+  transaction.delivery_timing === 'scheduled' ? 'Scheduled delivery' : 'Estimated arrival'
+);
 
 const formatTotal = (tx: Transaction) => {
   if (tx.total == null) return '-';
@@ -630,6 +677,13 @@ onMounted(() => {
 .transaction-card-title { min-width: 0; display: grid; gap: 4px; }
 .transaction-order { color: #0f172a; font-size: 14px; font-weight: 900; overflow-wrap: anywhere; }
 .transaction-date { color: #64748b; font-size: 12px; }
+.delivery-time-badge { display: inline-flex; align-items: center; gap: 9px; min-width: 176px; padding: 8px 10px; border: 1px solid #c7d2fe; border-radius: 8px; background: #eef2ff; color: #4338ca; }
+.delivery-time-badge.scheduled { border-color: #99f6e4; background: #f0fdfa; color: #0f766e; }
+.delivery-time-badge > span { display: grid; gap: 2px; }
+.delivery-time-badge small { color: #64748b; font-size: 9px; font-weight: 800; letter-spacing: 0.5px; line-height: 1; text-transform: uppercase; }
+.delivery-time-badge strong { color: #0f172a; font-size: 12px; line-height: 1.25; white-space: nowrap; }
+.mobile-delivery-time { padding: 0 16px 14px; }
+.mobile-delivery-time .delivery-time-badge { width: 100%; box-sizing: border-box; }
 .transaction-shop { display: grid; grid-template-columns: 36px 1fr; align-items: center; gap: 10px; padding: 16px 16px 12px; }
 .transaction-shop-icon { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; background: #eef2ff; color: #4f46e5; }
 .transaction-shop > div { min-width: 0; display: grid; gap: 3px; }
@@ -687,6 +741,7 @@ onMounted(() => {
 .detail-item.full { grid-column: span 2; }
 .detail-label { font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
 .detail-value { font-size: 14px; font-weight: 600; color: #0f172a; }
+.delivery-detail-time { display: inline-flex; align-items: center; gap: 7px; color: #4338ca; }
 .status-select { width: 100%; min-width: 180px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; color: #0f172a; font-size: 14px; font-weight: 600; }
 .status-select:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.15); }
 .rating-stars { display: flex; gap: 10px; align-items: center; }

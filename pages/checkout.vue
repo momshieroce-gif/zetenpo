@@ -143,6 +143,35 @@
                 <div v-if="mobileError" class="field-error">{{ mobileError }}</div>
                 <div class="form-field-label">Order Note <span class="form-field-optional">(Optional)</span></div>
                 <textarea v-model="note" class="input" rows="4" placeholder="Add any special instructions for your order..."></textarea>
+
+                <div class="delivery-time-section">
+                  <div class="delivery-time-heading">
+                    <span class="delivery-time-title">Estimated time of arrival</span>
+                    <strong>{{ estimatedArrivalLabel }}</strong>
+                  </div>
+                  <p class="delivery-time-copy">Based on preparation time and the current route from the store.</p>
+
+                  <label class="eta-confirmation" :class="{ active: useEstimatedArrival }">
+                    <input v-model="useEstimatedArrival" type="checkbox" />
+                    <span>I confirm that I am available at the estimated arrival time.</span>
+                  </label>
+
+                  <div v-if="!useEstimatedArrival" class="scheduled-delivery">
+                    <div class="scheduled-delivery-heading">When are you available to receive the order?</div>
+                    <div class="scheduled-delivery-fields">
+                      <label>
+                        <span>Date</span>
+                        <input v-model="deliveryDate" type="date" class="input" :min="minimumDeliveryDate" />
+                      </label>
+                      <label>
+                        <span>Time</span>
+                        <input v-model="deliveryTime" type="time" class="input" />
+                      </label>
+                    </div>
+                  </div>
+                  <div v-if="deliveryTimeError" class="field-error">{{ deliveryTimeError }}</div>
+                </div>
+
                 <button type="submit" class="complete-btn" :disabled="isSubmitting">
                   <svg v-if="!isSubmitting" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="currentColor"/></svg>
                   <span v-if="!isSubmitting">Complete Order</span>
@@ -188,6 +217,11 @@ const currentZoom = ref(15);
 const mobile = ref('');
 const note = ref('');
 const mobileError = ref('');
+const deliveryTimeError = ref('');
+const useEstimatedArrival = ref(false);
+const deliveryDate = ref('');
+const deliveryTime = ref('');
+const routeDurationMinutes = ref<number | null>(null);
 const isSubmitting = ref(false);
 const showUserInfo = ref(true);
 const showStoreInfo = ref(true);
@@ -220,6 +254,26 @@ const deliveryCharge = computed(() => {
   return Math.round((deliveryChargeSettings.value.standard_delivery_charge + distance.value * deliveryChargeSettings.value.amount_per_km) * 100) / 100;
 });
 const deliveryChargeLabel = computed(() => deliveryMethod.value === 'pickup' ? 'Pick up from store' : 'Delivery Charge');
+const estimatedDurationMinutes = computed(() => {
+  const preparationMinutes = 60;
+  if (deliveryMethod.value === 'pickup') return preparationMinutes;
+  const travelMinutes = routeDurationMinutes.value ?? Math.ceil((distance.value / 25) * 60);
+  return Math.max(30, preparationMinutes + travelMinutes);
+});
+const estimatedArrivalLabel = computed(() => {
+  const arrival = new Date(Date.now() + estimatedDurationMinutes.value * 60_000);
+  return arrival.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+});
+const minimumDeliveryDate = computed(() => {
+  const now = new Date();
+  const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 10);
+});
 
 const mapCenter = computed(() => {
   if (searchedLat.value !== null && searchedLng.value !== null) {
@@ -360,6 +414,8 @@ const drawRoute = () => {
     (result: any, status: string) => {
       if (status === 'OK' && result) {
         directionsRenderer.setDirections(result);
+        const durationSeconds = Number(result.routes?.[0]?.legs?.[0]?.duration?.value || 0);
+        routeDurationMinutes.value = durationSeconds > 0 ? Math.ceil(durationSeconds / 60) : null;
         const bounds = result.routes?.[0]?.bounds;
         if (bounds) {
           map.fitBounds(bounds, 60);
@@ -454,11 +510,28 @@ watch(mobile, (val) => {
   }
 });
 
+watch([useEstimatedArrival, deliveryDate, deliveryTime], () => {
+  deliveryTimeError.value = '';
+});
+
 const processOrder = async () => {
   mobileError.value = '';
+  deliveryTimeError.value = '';
   if (!isValidMobile(mobile.value)) {
     mobileError.value = 'Please enter a valid mobile number.';
     return;
+  }
+  let requestedDeliveryAt: Date | null = null;
+  if (!useEstimatedArrival.value) {
+    if (!deliveryDate.value || !deliveryTime.value) {
+      deliveryTimeError.value = 'Select the date and time when you are available.';
+      return;
+    }
+    requestedDeliveryAt = new Date(`${deliveryDate.value}T${deliveryTime.value}:00`);
+    if (Number.isNaN(requestedDeliveryAt.getTime()) || requestedDeliveryAt.getTime() <= Date.now()) {
+      deliveryTimeError.value = 'Select an available delivery time in the future.';
+      return;
+    }
   }
   if (!hasUserLocation.value) {
     mobileError.value = 'Please allow location access before completing your order.';
@@ -492,6 +565,7 @@ const processOrder = async () => {
     const subtotalValue = parseFloat(orderItems.reduce((sum, item) => sum + item.subtotal, 0).toFixed(2));
     const deliveryChargeValue = deliveryCharge.value;
     const totalValue = parseFloat((subtotalValue + deliveryChargeValue).toFixed(2));
+    const estimatedArrival = new Date(Date.now() + estimatedDurationMinutes.value * 60_000);
     const orderNumber = `TRX-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
     const transactionRef = await addDoc(collection(db, 'transactions'), {
       order_number: orderNumber,
@@ -501,6 +575,10 @@ const processOrder = async () => {
       store_location: { latitude: shop.value.latitude, longitude: shop.value.longitude },
       delivery_location: { latitude: userLat.value!, longitude: userLng.value!, address: searchLocation.value || '' },
       delivery_method: deliveryMethod.value || 'delivery',
+      delivery_timing: useEstimatedArrival.value ? 'estimated' : 'scheduled',
+      estimated_arrival: useEstimatedArrival.value ? estimatedArrival : null,
+      requested_delivery_at: requestedDeliveryAt,
+      estimated_duration_minutes: estimatedDurationMinutes.value,
       payment_method: paymentMethod.value || 'cash',
       items: orderItems,
       subtotal: subtotalValue,
@@ -1056,6 +1134,103 @@ watch([shop, userLat, userLng], () => drawRoute());
   margin-top: 8px;
 }
 
+.delivery-time-section {
+  margin-top: 22px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.delivery-time-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #111827;
+}
+
+.delivery-time-title,
+.delivery-time-heading strong {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.delivery-time-heading strong {
+  color: #4f46e5;
+  white-space: nowrap;
+}
+
+.delivery-time-copy {
+  margin: 6px 0 14px;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.eta-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.eta-confirmation.active {
+  border-color: #818cf8;
+  background: #eef2ff;
+}
+
+.eta-confirmation input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex: 0 0 18px;
+  accent-color: #4f46e5;
+}
+
+.scheduled-delivery {
+  margin-top: 14px;
+}
+
+.scheduled-delivery-heading {
+  margin-bottom: 10px;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.scheduled-delivery-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.scheduled-delivery-fields label {
+  display: grid;
+  gap: 6px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.scheduled-delivery-fields .input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+}
+
 textarea.input {
   resize: vertical;
   min-height: 100px;
@@ -1197,6 +1372,14 @@ textarea.input {
   .complete-btn {
     height: 48px;
     font-size: 14px;
+  }
+  .delivery-time-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .scheduled-delivery-fields {
+    grid-template-columns: 1fr;
   }
 }
 </style>

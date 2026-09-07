@@ -6,76 +6,25 @@ import {
   documentId,
   getDoc as fbGetDoc,
   getDocs as fbGetDocs,
-  limit,
   onSnapshot as fbOnSnapshot,
-  orderBy,
-  query,
   serverTimestamp,
   setDoc as fbSetDoc,
   Timestamp,
   updateDoc as fbUpdateDoc,
-  where,
 } from 'firebase/firestore';
 
 export { collection, doc, documentId, limit, orderBy, query, serverTimestamp, Timestamp, where } from 'firebase/firestore';
 
-type LogOperation = 'read' | 'write' | 'delete' | 'login' | 'logout';
+type LogOperation = 'create' | 'update' | 'delete';
 
 type LogPayload = {
   operation: LogOperation;
   collectionPath?: string;
   documentPath?: string;
   status: 'success' | 'error';
+  payload: unknown;
   details?: Record<string, unknown>;
 };
-
-const recentLogKeys = new Map<string, number>();
-const LOG_DEDUPE_WINDOW_MS = 1500;
-const claimedRouteMinutes = new Set<string>();
-
-function getRouteMinuteKey(uid: string | null, routePath: string | null, timestamp: number): string | null {
-  if (!uid || !routePath) return null;
-  return `${uid}|${routePath}|${Math.floor(timestamp / 60000)}`;
-}
-
-function claimRouteMinute(uid: string | null, routePath: string | null, timestamp: number): boolean {
-  const key = getRouteMinuteKey(uid, routePath, timestamp);
-  if (!key) return true;
-  if (claimedRouteMinutes.has(key)) return false;
-
-  claimedRouteMinutes.clear();
-  claimedRouteMinutes.add(key);
-  return true;
-}
-
-function getLogKey(payload: LogPayload, uid: string | null, routePath: string | null): string {
-  return [
-    uid || 'anon',
-    payload.operation,
-    payload.status,
-    payload.collectionPath || '',
-    payload.documentPath || '',
-    routePath || '',
-  ].join('|');
-}
-
-function shouldSkipDuplicateLog(key: string): boolean {
-  const now = Date.now();
-  const last = recentLogKeys.get(key);
-
-  for (const [savedKey, savedAt] of recentLogKeys.entries()) {
-    if (now - savedAt > LOG_DEDUPE_WINDOW_MS * 3) {
-      recentLogKeys.delete(savedKey);
-    }
-  }
-
-  if (typeof last === 'number' && now - last < LOG_DEDUPE_WINDOW_MS) {
-    return true;
-  }
-
-  recentLogKeys.set(key, now);
-  return false;
-}
 
 function getPath(value: any): string {
   if (!value) return '';
@@ -87,35 +36,6 @@ function getPath(value: any): string {
   if (Array.isArray(internalPath.segments)) return internalPath.segments.join('/');
 
   return '';
-}
-
-function isUserLogsPath(path: string): boolean {
-  if (!path) return false;
-  return path.split('/')[0] === 'userLogs';
-}
-
-async function isSameAsPreviousUserLog(
-  db: any,
-  uid: string | null,
-  routePath: string | null,
-  clientCreatedAt: number
-): Promise<boolean> {
-  if (!uid || !routePath) return false;
-
-  const latestLogQuery = query(
-    fbCollection(db, 'userLogs'),
-    where('uid', '==', uid),
-    orderBy('createdAt', 'desc'),
-    limit(1)
-  );
-  const snapshot = await fbGetDocs(latestLogQuery);
-  const previousLog = snapshot.docs[0]?.data();
-  if (!previousLog) return false;
-
-  const previousClientCreatedAt = Number(previousLog.clientCreatedAt);
-  return previousLog.routePath === routePath
-    && Number.isFinite(previousClientCreatedAt)
-    && Math.floor(previousClientCreatedAt / 60000) === Math.floor(clientCreatedAt / 60000);
 }
 
 async function writeUserLog(payload: LogPayload): Promise<void> {
@@ -132,17 +52,6 @@ async function writeUserLog(payload: LogPayload): Promise<void> {
     const routePath = route?.fullPath || null;
     const clientCreatedAt = Date.now();
 
-    const dedupeKey = getLogKey(payload, uid, routePath);
-    if (shouldSkipDuplicateLog(dedupeKey)) {
-      return;
-    }
-    if (!claimRouteMinute(uid, routePath, clientCreatedAt)) {
-      return;
-    }
-    if (await isSameAsPreviousUserLog(db, uid, routePath, clientCreatedAt)) {
-      return;
-    }
-
     await fbAddDoc(fbCollection(db, 'userLogs'), {
       uid,
       email,
@@ -150,6 +59,7 @@ async function writeUserLog(payload: LogPayload): Promise<void> {
       collectionPath: payload.collectionPath || null,
       documentPath: payload.documentPath || null,
       status: payload.status,
+      payload: payload.payload ?? null,
       details: payload.details || null,
       routePath,
       userAgent: process.client ? navigator.userAgent : null,
@@ -162,9 +72,10 @@ async function writeUserLog(payload: LogPayload): Promise<void> {
 }
 
 async function logFirestore(
-  operation: Extract<LogOperation, 'read' | 'write' | 'delete'>,
+  operation: LogOperation,
   reference: any,
   status: 'success' | 'error',
+  payload: unknown,
   details?: Record<string, unknown>
 ): Promise<void> {
   const path = getPath(reference);
@@ -184,61 +95,36 @@ async function logFirestore(
     });
   }
 
-  if (isUserLogsPath(path)) return;
+  if (path.split('/')[0] === 'userLogs') return;
 
   await writeUserLog({
     operation,
     collectionPath,
     documentPath,
     status,
-    details,
-  });
-}
-
-export async function logUserAuthActivity(
-  operation: Extract<LogOperation, 'login' | 'logout'>,
-  status: 'success' | 'error',
-  details?: Record<string, unknown>
-): Promise<void> {
-  await writeUserLog({
-    operation,
-    status,
+    payload,
     details,
   });
 }
 
 export const getDoc = async (...args: any[]) => {
   const [reference] = args;
-  try {
-    const result = await fbGetDoc(reference);
-    await logFirestore('read', reference, 'success', { exists: result.exists() });
-    return result;
-  } catch (error: any) {
-    await logFirestore('read', reference, 'error', { code: error?.code, message: error?.message || 'Unknown error' });
-    throw error;
-  }
+  return fbGetDoc(reference);
 };
 
 export const getDocs = async (...args: any[]) => {
   const [reference] = args;
-  try {
-    const result = await fbGetDocs(reference);
-    await logFirestore('read', reference, 'success', { count: result.size });
-    return result;
-  } catch (error: any) {
-    await logFirestore('read', reference, 'error', { code: error?.code, message: error?.message || 'Unknown error' });
-    throw error;
-  }
+  return fbGetDocs(reference);
 };
 
 export const addDoc = async (...args: any[]) => {
   const [reference, data] = args;
   try {
     const result = await fbAddDoc(reference, data);
-    await logFirestore('write', result, 'success');
+    await logFirestore('create', result, 'success', data);
     return result;
   } catch (error: any) {
-    await logFirestore('write', reference, 'error', { code: error?.code, message: error?.message || 'Unknown error' });
+    await logFirestore('create', reference, 'error', data, { code: error?.code, message: error?.message || 'Unknown error' });
     throw error;
   }
 };
@@ -247,22 +133,23 @@ export const setDoc = async (...args: any[]) => {
   const [reference, data, options] = args;
   try {
     const result = await fbSetDoc(reference, data, options);
-    await logFirestore('write', reference, 'success');
+    await logFirestore('create', reference, 'success', data);
     return result;
   } catch (error: any) {
-    await logFirestore('write', reference, 'error', { code: error?.code, message: error?.message || 'Unknown error' });
+    await logFirestore('create', reference, 'error', data, { code: error?.code, message: error?.message || 'Unknown error' });
     throw error;
   }
 };
 
 export const updateDoc = async (...args: any[]) => {
   const [reference, ...rest] = args;
+  const payload = rest.length === 1 ? rest[0] : rest;
   try {
     const result = await (fbUpdateDoc as any)(reference, ...rest);
-    await logFirestore('write', reference, 'success');
+    await logFirestore('update', reference, 'success', payload);
     return result;
   } catch (error: any) {
-    await logFirestore('write', reference, 'error', { code: error?.code, message: error?.message || 'Unknown error' });
+    await logFirestore('update', reference, 'error', payload, { code: error?.code, message: error?.message || 'Unknown error' });
     throw error;
   }
 };
@@ -271,10 +158,10 @@ export const deleteDoc = async (...args: any[]) => {
   const [reference] = args;
   try {
     const result = await fbDeleteDoc(reference);
-    await logFirestore('delete', reference, 'success');
+    await logFirestore('delete', reference, 'success', null);
     return result;
   } catch (error: any) {
-    await logFirestore('delete', reference, 'error', { code: error?.code, message: error?.message || 'Unknown error' });
+    await logFirestore('delete', reference, 'error', null, { code: error?.code, message: error?.message || 'Unknown error' });
     throw error;
   }
 };
@@ -290,13 +177,10 @@ export const onSnapshot = (...args: any[]) => {
 
     return fbOnSnapshot(
       reference,
-      async (snapshot: any) => {
-        const count = typeof snapshot?.size === 'number' ? snapshot.size : 1;
-        await logFirestore('read', reference, 'success', { source: 'onSnapshot', count });
+      (snapshot: any) => {
         next(snapshot);
       },
-      async (err: any) => {
-        await logFirestore('read', reference, 'error', { source: 'onSnapshot', code: err?.code, message: err?.message || 'Snapshot error' });
+      (err: any) => {
         if (error) error(err);
       }
     );
@@ -306,13 +190,10 @@ export const onSnapshot = (...args: any[]) => {
     const observer = observerOrNext;
     return fbOnSnapshot(reference, {
       ...observer,
-      next: async (snapshot: any) => {
-        const count = typeof snapshot?.size === 'number' ? snapshot.size : 1;
-        await logFirestore('read', reference, 'success', { source: 'onSnapshot', count });
+      next: (snapshot: any) => {
         if (typeof observer.next === 'function') observer.next(snapshot);
       },
-      error: async (err: any) => {
-        await logFirestore('read', reference, 'error', { source: 'onSnapshot', code: err?.code, message: err?.message || 'Snapshot error' });
+      error: (err: any) => {
         if (typeof observer.error === 'function') observer.error(err);
       },
     });

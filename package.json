@@ -4,6 +4,10 @@
   "type": "module",
   "scripts": {
     "build": "nuxt build",
+    "build:android": "cross-env CAPACITOR=true nuxt generate",
+    "android:sync": "npm run build:android && cap sync android",
+    "android:open": "cap open android",
+    "android:run": "npm run android:sync && cap run android",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
@@ -11,13 +15,18 @@
     "seed": "tsx scripts/seed.ts"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.6.9",
     "@nuxt/devtools": "^1.3.3",
+    "cross-env": "^10.1.0",
+    "firebase-admin": "^12.5.0",
     "nuxt": "^3.12.0",
-    "typescript": "^5.5.0",
     "tsx": "^4.19.0",
-    "firebase-admin": "^12.5.0"
+    "typescript": "^5.5.0",
+    "vue-tsc": "^3.3.11"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/core": "^8.5.1",
     "@pinia/nuxt": "^0.5.1",
     "firebase": "^11.10.0",
     "pinia": "^2.1.7",

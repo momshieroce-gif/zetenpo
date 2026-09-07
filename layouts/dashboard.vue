@@ -128,7 +128,7 @@
 
 <script setup lang="ts">
 import { signOut } from 'firebase/auth';
-import { collection, getDocs, limit, logUserAuthActivity, orderBy, query, where } from '~/utils/firestoreLogger';
+import { collection, getDocs, limit, orderBy, query, where } from '~/utils/firestoreLogger';
 
 const authStore = useAuthStore();
 const { $firebase } = useNuxtApp() as any;
@@ -234,9 +234,7 @@ const onDocumentClick = (event: MouseEvent) => {
 const logout = async () => {
   try {
     await signOut($firebase.auth);
-    await logUserAuthActivity('logout', 'success', { source: 'dashboard-layout' });
-  } catch (e: any) {
-    await logUserAuthActivity('logout', 'error', { source: 'dashboard-layout', message: e?.message || 'Logout failed.' });
+  } catch {
     // ignore
   }
   authStore.logout();
@@ -283,7 +281,8 @@ onUnmounted(() => {
 .header-dropdown-item:hover { background: rgba(255,255,255,0.1); border-color: rgba(129,140,248,0.45); }
 .header-dropdown-item-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .operation-chip { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 999px; padding: 2px 8px; }
-.operation-chip.op-read { background: rgba(59,130,246,0.2); color: #93c5fd; }
+.operation-chip.op-read,
+.operation-chip.op-update { background: rgba(59,130,246,0.2); color: #93c5fd; }
 .operation-chip.op-write { background: rgba(34,197,94,0.2); color: #86efac; }
 .operation-chip.op-delete { background: rgba(239,68,68,0.2); color: #fca5a5; }
 .operation-chip.op-login { background: rgba(245,158,11,0.2); color: #fcd34d; }

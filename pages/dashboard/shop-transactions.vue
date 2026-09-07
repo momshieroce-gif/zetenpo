@@ -41,50 +41,77 @@
       </div>
       <div v-else-if="fetchError" class="state error">{{ fetchError }}</div>
       <template v-else-if="filteredTransactions.length">
-        <div class="table-scroll" role="region" aria-label="Shop transactions table" tabindex="0">
+        <div
+          class="table-scroll"
+          :class="{ dragging: isTableDragging }"
+          role="region"
+          aria-label="Shop transactions table"
+          tabindex="0"
+          @pointerdown="startTableDrag"
+          @pointermove="dragTable"
+          @pointerup="stopTableDrag"
+          @pointercancel="stopTableDrag"
+          @lostpointercapture="stopTableDrag">
           <table class="data-table">
           <thead>
             <tr>
-              <th>Date & Time</th>
+              <th>Date & Time / ETA</th>
               <th>Shop</th>
-              <th>Customer Mobile</th>
               <th>Total</th>
-              <th>Payment Method</th>
               <th>Status</th>
               <th class="actions">Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="tx in paginatedTransactions" :key="tx.id">
-              <td>{{ formatDate(tx.createdAt) }}</td>
-              <td>{{ shopMap[tx.store_id] || tx.store_id || '-' }}</td>
-              <td>{{ tx.customer_mobile || '-' }}</td>
-              <td>{{ formatTotal(tx) }}</td>
-              <td>{{ tx.payment_method || '-' }}</td>
+            <tr v-for="(tx, rowIndex) in paginatedTransactions" :key="tx.id">
               <td>
-                <template v-if="canManageStatuses">
-                  <select class="status-select" :value="tx.status || 'pending'" @change="handleStatusChange($event, tx)">
-                    <option v-for="status in statusList" :key="status.slug" :value="status.slug">
-                      {{ status.name || displayStatus(status.slug) }}
-                    </option>
-                  </select>
-                </template>
-                <span v-else class="badge" :class="statusClass(tx.status)">
+                <div class="transaction-timing-cell">
+                  <span class="transaction-created-time">{{ formatDate(tx.createdAt) }}</span>
+                  <div class="delivery-time-badge" :class="{ scheduled: tx.delivery_timing === 'scheduled' }">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                    <span>
+                      <small>{{ deliveryTimeLabel(tx) }}</small>
+                      <strong>{{ formatDeliveryTime(tx) }}</strong>
+                    </span>
+                  </div>
+                </div>
+              </td>
+              <td>{{ shopMap[tx.store_id] || tx.store_id || '-' }}</td>
+              <td>{{ formatTotal(tx) }}</td>
+              <td>
+                <span class="badge" :class="statusClass(tx.status)">
                   <span class="dot"></span>
                   {{ displayStatus(tx.status) }}
                 </span>
               </td>
               <td class="actions">
-                <button
-                  class="btn-action feedback"
-                  :title="feedbackAvailabilityTitle(tx)"
-                  :disabled="!canSubmitFeedback(tx)"
-                  @click="openFeedbackModal(tx)">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
-                </button>
-                <button class="btn-action view" title="View" @click="viewTransaction(tx)">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                </button>
+                <div class="action-menu" :class="{ 'opens-up': rowIndex >= paginatedTransactions.length - 2 }" @click.stop>
+                  <button
+                    class="action-menu-trigger"
+                    type="button"
+                    title="More actions"
+                    aria-label="More actions"
+                    :aria-expanded="openActionMenuId === tx.id"
+                    @click="toggleActionMenu(tx.id)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+                  </button>
+                  <div v-if="openActionMenuId === tx.id" class="action-menu-dropdown" role="menu">
+                    <button
+                      class="action-menu-item feedback"
+                      type="button"
+                      role="menuitem"
+                      :title="feedbackAvailabilityTitle(tx)"
+                      :disabled="!canSubmitFeedback(tx)"
+                      @click="handleFeedbackMenuAction(tx)">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
+                      <span>Feedback</span>
+                    </button>
+                    <button class="action-menu-item view" type="button" role="menuitem" @click="handleViewMenuAction(tx)">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      <span>View</span>
+                    </button>
+                  </div>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -110,6 +137,16 @@
               <div>
                 <span class="mobile-label">Shop</span>
                 <strong>{{ shopMap[tx.store_id] || tx.store_id || '-' }}</strong>
+              </div>
+            </div>
+
+            <div class="mobile-delivery-time">
+              <div class="delivery-time-badge" :class="{ scheduled: tx.delivery_timing === 'scheduled' }">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                <span>
+                  <small>{{ deliveryTimeLabel(tx) }}</small>
+                  <strong>{{ formatDeliveryTime(tx) }}</strong>
+                </span>
               </div>
             </div>
 
@@ -213,6 +250,13 @@
             <div class="detail-item">
               <span class="detail-label">Delivery Method</span>
               <span class="detail-value">{{ selectedTransaction.delivery_method || '-' }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">{{ deliveryTimeLabel(selectedTransaction) }}</span>
+              <span class="detail-value delivery-detail-time">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                {{ formatDeliveryTime(selectedTransaction) }}
+              </span>
             </div>
             <div class="detail-item">
               <span class="detail-label">Customer Mobile</span>
@@ -364,6 +408,10 @@ interface Transaction {
   store_location?: { latitude?: number; longitude?: number };
   delivery_location?: { latitude?: number; longitude?: number; address?: string };
   delivery_method?: string;
+  delivery_timing?: 'estimated' | 'scheduled';
+  estimated_arrival?: any;
+  requested_delivery_at?: any;
+  estimated_duration_minutes?: number;
   payment_method?: string;
   items?: any[];
   subtotal?: number;
@@ -396,6 +444,48 @@ const shopMap = ref<Record<string, string>>({});
 const storeFilter = ref('');
 const statusFilter = ref('');
 const dateFilter = ref('');
+const openActionMenuId = ref<string | null>(null);
+const isTableDragging = ref(false);
+let tableDragStartX = 0;
+let tableDragStartScrollLeft = 0;
+
+const startTableDrag = (event: PointerEvent) => {
+  const container = event.currentTarget as HTMLElement;
+  const target = event.target as HTMLElement;
+  if (event.button !== 0 || container.scrollWidth <= container.clientWidth) return;
+  if (target.closest('button, a, input, select, textarea, label, [role="menuitem"]')) return;
+
+  isTableDragging.value = true;
+  tableDragStartX = event.clientX;
+  tableDragStartScrollLeft = container.scrollLeft;
+  container.setPointerCapture(event.pointerId);
+  event.preventDefault();
+};
+
+const dragTable = (event: PointerEvent) => {
+  if (!isTableDragging.value) return;
+  const container = event.currentTarget as HTMLElement;
+  container.scrollLeft = tableDragStartScrollLeft - (event.clientX - tableDragStartX);
+};
+
+const stopTableDrag = (event: PointerEvent) => {
+  if (!isTableDragging.value) return;
+  const container = event.currentTarget as HTMLElement;
+  isTableDragging.value = false;
+  if (container.hasPointerCapture(event.pointerId)) container.releasePointerCapture(event.pointerId);
+};
+
+const closeActionMenu = () => {
+  openActionMenuId.value = null;
+};
+
+const toggleActionMenu = (transactionId: string) => {
+  openActionMenuId.value = openActionMenuId.value === transactionId ? null : transactionId;
+};
+
+const handleActionMenuKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') closeActionMenu();
+};
 
 const userLat = ref<number | null>(null);
 const userLng = ref<number | null>(null);
@@ -476,6 +566,24 @@ const formatDate = (value: any) => {
   if (!date) return '-';
   return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
 };
+
+const formatDeliveryTime = (transaction: Transaction) => {
+  const savedTime = transaction.delivery_timing === 'scheduled'
+    ? transaction.requested_delivery_at
+    : transaction.estimated_arrival;
+  const savedDate = toDate(savedTime);
+  if (savedDate) return formatDate(savedDate);
+
+  const createdDate = toDate(transaction.createdAt);
+  const durationMinutes = Number(transaction.estimated_duration_minutes);
+  if (!createdDate || !Number.isFinite(durationMinutes)) return '-';
+
+  return formatDate(new Date(createdDate.getTime() + durationMinutes * 60_000));
+};
+
+const deliveryTimeLabel = (transaction: Transaction) => (
+  transaction.delivery_timing === 'scheduled' ? 'Scheduled delivery' : 'Estimated arrival'
+);
 
 const formatTotal = (tx: Transaction) => {
   if (tx.total == null) return '-';
@@ -571,6 +679,16 @@ const allItemsFeedbacked = computed(() => {
 const viewTransaction = (tx: Transaction) => {
   selectedTransaction.value = tx;
   showViewModal.value = true;
+};
+
+const handleViewMenuAction = (tx: Transaction) => {
+  closeActionMenu();
+  viewTransaction(tx);
+};
+
+const handleFeedbackMenuAction = (tx: Transaction) => {
+  closeActionMenu();
+  void openFeedbackModal(tx);
 };
 
 const closeViewModal = () => {
@@ -769,8 +887,15 @@ const fetchTransactions = async () => {
 };
 
 onMounted(() => {
+  document.addEventListener('click', closeActionMenu);
+  document.addEventListener('keydown', handleActionMenuKeydown);
   getUserLocation();
   fetchTransactions();
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', closeActionMenu);
+  document.removeEventListener('keydown', handleActionMenuKeydown);
 });
 </script>
 
@@ -796,7 +921,13 @@ onMounted(() => {
 .empty-icon { width: 72px; height: 72px; border-radius: 50%; background: #f8fafc; color: #94a3b8; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
 .empty-title { font-size: 18px; font-weight: 800; color: #0f172a; margin: 0 0 4px; }
 .empty-desc { font-size: 14px; color: #64748b; margin: 0 0 20px; }
-.table-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+.table-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; cursor: grab; user-select: none; }
+.table-scroll.dragging { cursor: grabbing; }
+.table-scroll button,
+.table-scroll a,
+.table-scroll input,
+.table-scroll select,
+.table-scroll textarea { user-select: auto; }
 .table-scroll::-webkit-scrollbar { height: 8px; }
 .table-scroll::-webkit-scrollbar-track { background: transparent; }
 .table-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border: 2px solid #fff; border-radius: 8px; }
@@ -812,6 +943,15 @@ onMounted(() => {
 .transaction-heading { min-width: 0; display: grid; gap: 4px; }
 .transaction-order { color: #0f172a; font-size: 14px; font-weight: 900; overflow-wrap: anywhere; }
 .transaction-date { color: #64748b; font-size: 12px; }
+.transaction-timing-cell { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+.transaction-created-time { min-width: 150px; color: #334155; font-weight: 600; }
+.delivery-time-badge { display: inline-flex; align-items: center; gap: 9px; min-width: 176px; padding: 8px 10px; border: 1px solid #c7d2fe; border-radius: 8px; background: #eef2ff; color: #4338ca; }
+.delivery-time-badge.scheduled { border-color: #99f6e4; background: #f0fdfa; color: #0f766e; }
+.delivery-time-badge > span { display: grid; gap: 2px; }
+.delivery-time-badge small { color: #64748b; font-size: 9px; font-weight: 800; letter-spacing: 0.5px; line-height: 1; text-transform: uppercase; }
+.delivery-time-badge strong { color: #0f172a; font-size: 12px; line-height: 1.25; white-space: nowrap; }
+.mobile-delivery-time { padding: 0 16px 14px; }
+.mobile-delivery-time .delivery-time-badge { width: 100%; box-sizing: border-box; }
 .transaction-shop-row { display: grid; grid-template-columns: 36px 1fr; align-items: center; gap: 10px; padding: 16px 16px 12px; }
 .transaction-shop-row > div { min-width: 0; display: grid; gap: 3px; }
 .transaction-shop-row strong { color: #0f172a; font-size: 14px; overflow-wrap: anywhere; }
@@ -845,6 +985,17 @@ onMounted(() => {
 .btn-ghost { padding: 10px 18px; background: #f1f5f9; color: #475569; }
 .btn-ghost:hover { background: #e2e8f0; }
 .actions { text-align: right; white-space: nowrap; }
+.action-menu { position: relative; display: inline-flex; }
+.action-menu-trigger { width: 36px; height: 36px; padding: 0; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #475569; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s, border-color 0.2s, color 0.2s; }
+.action-menu-trigger:hover,
+.action-menu-trigger[aria-expanded="true"] { border-color: #a5b4fc; background: #eef2ff; color: #4338ca; }
+.action-menu-trigger:focus-visible { outline: 3px solid rgba(79,70,229,0.18); outline-offset: 2px; }
+.action-menu-dropdown { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; width: 150px; padding: 6px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; box-shadow: 0 14px 32px rgba(15,23,42,0.16); display: grid; gap: 3px; }
+.action-menu.opens-up .action-menu-dropdown { top: auto; bottom: calc(100% + 6px); }
+.action-menu-item { width: 100%; min-height: 36px; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; display: flex; align-items: center; gap: 9px; color: #334155; font-size: 13px; font-weight: 700; text-align: left; cursor: pointer; }
+.action-menu-item.view:hover { background: #eef2ff; color: #4338ca; }
+.action-menu-item.feedback:hover { background: #f0fdfa; color: #0f766e; }
+.action-menu-item:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-icon { width: 34px; height: 34px; border-radius: 10px; background: none; border: 1px solid transparent; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; margin-left: 6px; }
 .btn-icon:hover { transform: translateY(-1px); }
 .btn-icon:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
@@ -871,6 +1022,7 @@ onMounted(() => {
 .detail-item.full { grid-column: span 2; }
 .detail-label { font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
 .detail-value { font-size: 14px; font-weight: 600; color: #0f172a; }
+.delivery-detail-time { display: inline-flex; align-items: center; gap: 7px; color: #4338ca; }
 .status-select { width: 100%; min-width: 180px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; color: #0f172a; font-size: 14px; font-weight: 600; }
 .status-select:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.15); }
 .rating-stars { display: flex; gap: 10px; align-items: center; }
