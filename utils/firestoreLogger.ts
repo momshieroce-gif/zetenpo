@@ -7,6 +7,7 @@ import {
   getDoc as fbGetDoc,
   getDocs as fbGetDocs,
   onSnapshot as fbOnSnapshot,
+  runTransaction as fbRunTransaction,
   serverTimestamp,
   setDoc as fbSetDoc,
   Timestamp,
@@ -200,4 +201,32 @@ export const onSnapshot = (...args: any[]) => {
   }
 
   return (fbOnSnapshot as any)(...args);
+};
+
+export const runLoggedTransaction = async (
+  db: any,
+  updateFunction: (transaction: any) => Promise<any>,
+  payload: unknown,
+  details?: Record<string, unknown>
+) => {
+  try {
+    const result = await fbRunTransaction(db, updateFunction);
+    await writeUserLog({
+      operation: 'update',
+      collectionPath: 'transactions',
+      status: 'success',
+      payload,
+      details: { atomic: true, ...details },
+    });
+    return result;
+  } catch (error: any) {
+    await writeUserLog({
+      operation: 'update',
+      collectionPath: 'transactions',
+      status: 'error',
+      payload,
+      details: { atomic: true, ...details, code: error?.code, message: error?.message || 'Unknown error' },
+    });
+    throw error;
+  }
 };

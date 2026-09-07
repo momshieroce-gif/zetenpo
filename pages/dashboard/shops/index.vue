@@ -52,20 +52,33 @@
               </span>
             </td>
             <td class="actions">
-              <template v-if="shop.isActive">
-                <button v-if="shop.ownerId === authStore.user?.uid" class="btn-icon members" @click="openMembers(shop)" title="Members">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                </button>
-                <button class="btn-icon products" @click="navigateTo('/dashboard/shops/' + shop.id + '/products')" title="Products">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-                </button>
-                <button v-if="shop.ownerId === authStore.user?.uid" class="btn-icon edit" @click="openEdit(shop)" title="Edit">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                </button>
-                <button v-if="shop.ownerId === authStore.user?.uid" class="btn-icon delete" @click="softDelete(shop.id)" title="Delete">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                </button>
-              </template>
+              <details v-if="shop.isActive" class="actions-menu">
+                <summary class="btn-icon menu-trigger" title="Actions" aria-label="Show shop actions">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+                </summary>
+                <div class="actions-menu-panel">
+                  <button v-if="shop.ownerId === authStore.user?.uid" class="btn-icon members" @click="openMembers(shop)" title="Members">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span>Members</span>
+                  </button>
+                  <button class="btn-icon products" @click="navigateTo('/dashboard/shops/' + shop.id + '/products')" title="Products">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                    <span>Products</span>
+                  </button>
+                  <button class="btn-icon pos" @click="navigateTo('/dashboard/shops/' + shop.id + '/pos')" title="Point of Sale">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h16v6H4zM3 8h18v12H3z"/><path d="M7 12h4M7 16h2M15 12h2M15 16h2"/></svg>
+                    <span>POS</span>
+                  </button>
+                  <button v-if="shop.ownerId === authStore.user?.uid" class="btn-icon edit" @click="openEdit(shop)" title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    <span>Edit</span>
+                  </button>
+                  <button v-if="shop.ownerId === authStore.user?.uid" class="btn-icon delete" @click="softDelete(shop.id)" title="Delete">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                    <span>Delete</span>
+                  </button>
+                </div>
+              </details>
             </td>
           </tr>
         </tbody>
@@ -97,6 +110,10 @@
             <button class="mobile-action products" @click="navigateTo('/dashboard/shops/' + shop.id + '/products')">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
               <span>Products</span>
+            </button>
+            <button class="mobile-action pos" @click="navigateTo('/dashboard/shops/' + shop.id + '/pos')">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h16v6H4zM3 8h18v12H3z"/><path d="M7 12h4M7 16h2M15 12h2M15 16h2"/></svg>
+              <span>POS</span>
             </button>
             <button
               v-if="shop.ownerId === authStore.user?.uid"
@@ -1017,6 +1034,7 @@ onMounted(() => {
 .mobile-action { min-height: 40px; padding: 0 10px; border: 1px solid transparent; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-size: 12px; font-weight: 800; cursor: pointer; }
 .mobile-action.members { color: #7e22ce; background: #faf5ff; border-color: #e9d5ff; }
 .mobile-action.products { color: #0f766e; background: #f0fdfa; border-color: #99f6e4; }
+.mobile-action.pos { color: #166534; background: #f0fdf4; border-color: #bbf7d0; }
 .mobile-action.edit { color: #4338ca; background: #eef2ff; border-color: #c7d2fe; }
 .mobile-action.delete { color: #dc2626; background: #fef2f2; border-color: #fecaca; }
 .shop-card-inactive { padding: 12px 16px; border-top: 1px solid #f1f5f9; background: #f8fafc; color: #64748b; font-size: 12px; font-weight: 600; }
@@ -1033,6 +1051,14 @@ onMounted(() => {
 .badge-inactive { background: #f1f5f9; color: #64748b; }
 .badge-inactive .dot { background: #94a3b8; }
 .actions, .data-table th.actions { text-align: right; white-space: nowrap; }
+.actions-menu { position: relative; display: inline-block; }
+.actions-menu summary { list-style: none; }
+.actions-menu summary::-webkit-details-marker { display: none; }
+.menu-trigger { margin-left: 0; color: #475569; }
+.menu-trigger:hover, .actions-menu[open] .menu-trigger { background: #f1f5f9; border-color: #cbd5e1; }
+.actions-menu-panel { position: absolute; z-index: 10; top: calc(100% + 6px); right: 0; display: flex; flex-direction: column; gap: 2px; padding: 6px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; box-shadow: 0 12px 28px rgba(15,23,42,0.16); }
+.actions-menu-panel .btn-icon { width: 100%; min-width: 120px; margin-left: 0; padding: 0 10px; justify-content: flex-start; gap: 8px; font-size: 13px; font-weight: 700; }
+.card:has(.actions-menu[open]) { overflow: visible; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; font-weight: 700; font-size: 14px; border: none; cursor: pointer; transition: all 0.2s; }
 .btn-primary { padding: 10px 18px; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: #0f172a; box-shadow: 0 8px 20px rgba(251,191,36,0.35); }
 .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(251,191,36,0.45); }
@@ -1106,6 +1132,8 @@ onMounted(() => {
 }
 .btn-icon.products { color: #0f766e; }
 .btn-icon.products:hover { background: #f0fdfa; border-color: #99f6e4; }
+.btn-icon.pos { color: #166534; }
+.btn-icon.pos:hover { background: #f0fdf4; border-color: #bbf7d0; }
 .modal-card.product-modal { max-width: 620px; }
 .product-form { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #f1f5f9; }
 .product-form-actions { display: flex; gap: 12px; margin-top: 16px; }

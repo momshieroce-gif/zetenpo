@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, query, where, serverTimestamp } from '~/utils/firestoreLogger';
+import { collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, query, runLoggedTransaction, where, serverTimestamp } from '~/utils/firestoreLogger';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { Inventory, Product, ProductVariant, Shop } from '~/types';
 
@@ -73,6 +73,7 @@ const stockForm = reactive({
 
 const variantForm = reactive({
   sku: '',
+  barcode: '',
   name: '',
   price: 0,
   size: '',
@@ -105,6 +106,7 @@ const closeProductModal = () => {
 
 const resetVariantForm = () => {
   variantForm.sku = '';
+  variantForm.barcode = '';
   variantForm.name = variantTargetProduct.value?.name || '';
   variantForm.price = Number(variantTargetProduct.value?.price || 0);
   variantForm.size = '';
@@ -112,6 +114,15 @@ const resetVariantForm = () => {
   variantForm.quantity = 0;
   variantForm.reorderLevel = 10;
   variantError.value = '';
+};
+
+const isValidEan13 = (barcode: string) => {
+  if (!/^\d{13}$/.test(barcode)) return false;
+  const digits = barcode.split('').map(Number);
+  const weightedSum = digits.slice(0, 12).reduce((sum, digit, index) => {
+    return sum + digit * (index % 2 === 0 ? 1 : 3);
+  }, 0);
+  return (10 - (weightedSum % 10)) % 10 === digits[12];
 };
 
 const fetchProductVariants = async (productId: string) => {
@@ -167,14 +178,19 @@ const createProductVariant = async () => {
   variantError.value = '';
 
   const sku = variantForm.sku.trim().toUpperCase();
+  const barcode = variantForm.barcode.trim();
   const name = variantForm.name.trim();
   const size = variantForm.size.trim();
   const color = variantForm.color.trim();
   const price = Number(variantForm.price);
   const quantity = Number(variantForm.quantity);
   const reorderLevel = Number(variantForm.reorderLevel);
-  if (!sku || !name || !size || !color) {
-    variantError.value = 'SKU, variant name, size, and color are required.';
+  if (!sku || !barcode || !name || !size || !color) {
+    variantError.value = 'SKU, barcode, variant name, size, and color are required.';
+    return;
+  }
+  if (!isValidEan13(barcode)) {
+    variantError.value = 'Barcode must be a valid 13-digit EAN-13 barcode.';
     return;
   }
   if (![price, quantity, reorderLevel].every(Number.isFinite) || price < 0 || quantity < 0 || reorderLevel < 0) {
@@ -190,34 +206,44 @@ const createProductVariant = async () => {
       return;
     }
 
-    const variantRef = doc(collection(db, 'productVariants'));
-    await setDoc(variantRef, {
-      productId: variantTargetProduct.value.id,
-      sku,
-      name,
-      price,
-      attributes: { size, color },
-    });
-    await setDoc(doc(db, 'inventory', variantRef.id), {
-      variantId: variantRef.id,
-      sku,
-      quantity,
-      reservedQuantity: 0,
-      availableQuantity: quantity,
-      reorderLevel,
-      updatedAt: serverTimestamp(),
-    });
-    if (quantity > 0) {
-      await addDoc(collection(db, 'inventoryTransactions'), {
+    const variantRef = doc(db, 'productVariants', barcode);
+    await runLoggedTransaction(db, async (firestoreTransaction: any) => {
+      const barcodeSnapshot = await firestoreTransaction.get(variantRef);
+      if (barcodeSnapshot.exists()) {
+        throw new Error('This barcode is already assigned to another variant.');
+      }
+
+      firestoreTransaction.set(variantRef, {
+        productId: variantTargetProduct.value!.id,
+        sku,
+        barcode,
+        name,
+        price,
+        attributes: { size, color },
+      });
+      firestoreTransaction.set(doc(db, 'inventory', variantRef.id), {
+        variantId: variantRef.id,
+        sku,
+        quantity,
+        reservedQuantity: 0,
+        availableQuantity: quantity,
+        reorderLevel,
+        updatedAt: serverTimestamp(),
+      });
+      if (quantity > 0) {
+        firestoreTransaction.set(doc(collection(db, 'inventoryTransactions')), {
         variantId: variantRef.id,
         type: 'IN',
         quantity,
         referenceType: 'MANUAL',
-        referenceId: variantTargetProduct.value.id,
+        referenceId: variantTargetProduct.value!.id,
         createdAt: serverTimestamp(),
         createdBy: authStore.user?.uid || '',
       });
-    }
+      }
+    }, { barcode, sku, productId: variantTargetProduct.value.id }, {
+      affectedCollections: ['productVariants', 'inventory', 'inventoryTransactions'],
+    });
 
     await fetchProductVariants(variantTargetProduct.value.id);
     await fetchInventorySummaries(products.value.map((product: Product) => product.id));
@@ -792,6 +818,7 @@ onMounted(() => {
                 <tr>
                   <th>Variant</th>
                   <th>SKU</th>
+                  <th>Barcode</th>
                   <th>Price</th>
                   <th>Quantity</th>
                   <th>Available</th>
@@ -804,6 +831,7 @@ onMounted(() => {
                     <div class="variant-description">{{ variant.name }}</div>
                   </td>
                   <td><span class="variant-sku">{{ variant.sku }}</span></td>
+                  <td><span class="variant-barcode">{{ variant.barcode || '-' }}</span></td>
                   <td>₱{{ Number(variant.price || 0).toFixed(2) }}</td>
                   <td>{{ variantInventoryById[variant.id]?.quantity ?? 0 }}</td>
                   <td>{{ variantInventoryById[variant.id]?.availableQuantity ?? 0 }}</td>
@@ -818,6 +846,10 @@ onMounted(() => {
             <div class="field">
               <label>SKU</label>
               <input v-model="variantForm.sku" type="text" class="input" placeholder="MNS-SHIRT-BLK-M" />
+            </div>
+            <div class="field">
+              <label>Barcode (EAN-13)</label>
+              <input v-model="variantForm.barcode" type="text" inputmode="numeric" maxlength="13" class="input" placeholder="4801234567891" />
             </div>
             <div class="field">
               <label>Variant Name</label>
@@ -1119,6 +1151,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .stock-form-grid { margin-top: 6px; }
 .selected-variant-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #64748b; font-size: 12px; }
 .variant-sku { padding: 3px 7px; border-radius: 5px; background: #eef2ff; color: #4338ca; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-weight: 800; white-space: nowrap; }
+.variant-barcode { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-weight: 700; letter-spacing: 0; white-space: nowrap; }
 .table-wrap { width: 100%; overflow-x: auto; }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th, .data-table td { padding: 16px 20px; text-align: left; font-size: 14px; border-bottom: 1px solid #f1f5f9; }
