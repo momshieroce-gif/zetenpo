@@ -90,7 +90,9 @@ const email = ref('');
 const password = ref('');
 const showPassword = ref(false);
 const loading = ref(false);
-const error = ref('');
+const error = ref(route.query.accountDisabled === '1'
+  ? 'Your account has been disabled. Please contact support.'
+  : '');
 
 const getEmailSignInErrorMessage = (signInError: any) => {
   const invalidCredentialCodes = [
@@ -127,6 +129,10 @@ const signIn = async () => {
     const userDoc = await getDoc(doc(db, 'users', cred.user.uid));
     if (!userDoc.exists()) throw new Error('User account not found.');
     const data = userDoc.data() as any;
+    if (data.isActive === false) {
+      await signOut($firebase.auth);
+      throw new Error('Your account has been disabled. Please contact support.');
+    }
     const profile = {
       uid: cred.user.uid,
       email: data.email || cred.user.email,
@@ -134,6 +140,7 @@ const signIn = async () => {
       photoURL: data.photoURL || cred.user.photoURL,
       roleId: data.roleId || '',
       role: data.role || '',
+      isActive: data.isActive !== false,
     };
     authStore.setUser(profile as any);
     document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(profile))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
@@ -158,6 +165,10 @@ const signInWithGoogle = async () => {
     let data: any;
     if (userDoc.exists()) {
       data = userDoc.data();
+      if (data.isActive === false) {
+        await signOut($firebase.auth);
+        throw new Error('Your account has been disabled. Please contact support.');
+      }
     } else {
       data = {
         name: cred.user.displayName || '',
@@ -180,6 +191,7 @@ const signInWithGoogle = async () => {
       photoURL: data.photoURL || cred.user.photoURL,
       roleId: data.roleId || '',
       role: data.role || '',
+      isActive: data.isActive !== false,
     };
     authStore.setUser(profile as any);
     document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(profile))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
