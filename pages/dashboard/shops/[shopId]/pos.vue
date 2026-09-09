@@ -13,6 +13,16 @@
 				<span class="status-dot"></span>
 				Register online
 			</div>
+			<button
+				class="maximize-btn"
+				type="button"
+				:title="isMaximized ? 'Exit maximized view' : 'Maximize POS'"
+				:aria-label="isMaximized ? 'Exit maximized view' : 'Maximize POS'"
+				@click="toggleMaximized">
+				<svg v-if="!isMaximized" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 1 2-2v-3"/></svg>
+				<svg v-else width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6"/></svg>
+				<span>{{ isMaximized ? 'Exit' : 'Maximize' }}</span>
+			</button>
 		</header>
 
 		<div v-if="loading" class="page-state">
@@ -314,6 +324,8 @@ const paymentMethod = ref('cash');
 const searchInputRef = ref<HTMLInputElement | null>(null);
 const selectedProduct = ref<ProductCatalogItem | null>(null);
 const receipt = ref<SaleReceipt | null>(null);
+const isMaximized = ref(false);
+const maximizedClass = 'pos-maximized';
 
 const paymentMethods = [
 	{ value: 'cash', label: 'Cash' },
@@ -627,12 +639,38 @@ const closeReceipt = async () => {
 	searchInputRef.value?.focus();
 };
 
-onMounted(loadCatalog);
+const applyMaximizedState = () => {
+	document.body.classList.toggle(maximizedClass, isMaximized.value);
+};
+
+const toggleMaximized = () => {
+	isMaximized.value = !isMaximized.value;
+	localStorage.setItem(maximizedClass, String(isMaximized.value));
+	applyMaximizedState();
+};
+
+const handleMaximizedKeydown = (event: KeyboardEvent) => {
+	if (event.key === 'Escape' && isMaximized.value && !receipt.value && !selectedProduct.value) toggleMaximized();
+};
+
+onMounted(() => {
+	isMaximized.value = localStorage.getItem(maximizedClass) === 'true';
+	applyMaximizedState();
+	document.addEventListener('keydown', handleMaximizedKeydown);
+	loadCatalog();
+});
+
+onUnmounted(() => {
+	document.removeEventListener('keydown', handleMaximizedKeydown);
+	document.body.classList.remove(maximizedClass);
+});
 </script>
 
 <style scoped>
 .pos-page { max-width: 1500px; margin: 0 auto; color: #172033; }
 .pos-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+.maximize-btn { min-height: 38px; display: inline-flex; align-items: center; gap: 7px; margin-left: auto; padding: 0 11px; border: 1px solid #cfd6df; border-radius: 7px; background: #fff; color: #526071; font-size: 11px; font-weight: 800; cursor: pointer; }
+.maximize-btn:hover { border-color: #75b798; background: #f7fbf8; color: #14643f; }
 .pos-header h1 { margin: 5px 0 2px; font-size: 28px; letter-spacing: 0; }
 .pos-header p { margin: 0; color: #687386; font-size: 14px; }
 .back-link { border: 0; padding: 0; background: transparent; color: #526071; display: inline-flex; align-items: center; gap: 5px; font-weight: 700; cursor: pointer; }
@@ -769,8 +807,9 @@ onMounted(loadCatalog);
 	.cart-items { max-height: none; }
 }
 @media (max-width: 520px) {
-	.pos-header { align-items: flex-start; }
+	.pos-header { align-items: flex-start; flex-wrap: wrap; }
 	.register-status { display: none; }
+	.maximize-btn { margin-left: 0; }
 	.catalog-panel { padding: 12px; }
 	.product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 	.product-tile { min-height: 150px; padding: 11px; }
@@ -781,6 +820,14 @@ onMounted(loadCatalog);
 </style>
 
 <style>
+body.pos-maximized { overflow: hidden; }
+body.pos-maximized .dashboard-header,
+body.pos-maximized .sidebar,
+body.pos-maximized .sidebar-backdrop { display: none !important; }
+body.pos-maximized .dashboard-main { margin-left: 0 !important; padding: 0 !important; min-height: 100vh; overflow: hidden; }
+body.pos-maximized .pos-page { position: fixed; inset: 0; z-index: 50; max-width: none; overflow: auto; padding: 20px; background: #f8fafc; }
+body.pos-maximized .pos-header { position: sticky; top: 0; z-index: 2; padding: 0 0 16px; background: #f8fafc; }
+
 @media print {
 	@page { size: 80mm auto; margin: 0; }
 	body.printing-pos-receipt { margin: 0; background: #fff; }

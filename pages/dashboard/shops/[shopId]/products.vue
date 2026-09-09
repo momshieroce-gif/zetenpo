@@ -42,6 +42,8 @@ const variantInventoryById = ref<Record<string, Inventory>>({});
 const variantsLoading = ref(false);
 const variantSaving = ref(false);
 const variantError = ref('');
+const variantSuccess = ref('');
+const editingVariantId = ref<string | null>(null);
 const showStockModal = ref(false);
 const stockTargetProduct = ref<Product | null>(null);
 const stockVariants = ref<ProductVariant[]>([]);
@@ -105,6 +107,8 @@ const closeProductModal = () => {
 };
 
 const resetVariantForm = () => {
+  editingVariantId.value = null;
+  variantSuccess.value = '';
   variantForm.sku = '';
   variantForm.barcode = '';
   variantForm.name = variantTargetProduct.value?.name || '';
@@ -116,6 +120,20 @@ const resetVariantForm = () => {
   variantError.value = '';
 };
 
+const openEditVariant = (variant: ProductVariant) => {
+  editingVariantId.value = variant.id;
+  variantSuccess.value = '';
+  variantForm.sku = variant.sku || '';
+  variantForm.barcode = variant.barcode || '';
+  variantForm.name = variant.name || '';
+  variantForm.price = Number(variant.price || 0);
+  variantForm.size = variant.attributes?.size || '';
+  variantForm.color = variant.attributes?.color || '';
+  variantForm.quantity = Number(variantInventoryById.value[variant.id]?.quantity || 0);
+  variantForm.reorderLevel = Number(variantInventoryById.value[variant.id]?.reorderLevel || 0);
+  variantError.value = '';
+};
+
 const isValidEan13 = (barcode: string) => {
   if (!/^\d{13}$/.test(barcode)) return false;
   const digits = barcode.split('').map(Number);
@@ -123,6 +141,20 @@ const isValidEan13 = (barcode: string) => {
     return sum + digit * (index % 2 === 0 ? 1 : 3);
   }, 0);
   return (10 - (weightedSum % 10)) % 10 === digits[12];
+};
+
+const ensureVariantBarcodeIsUnique = async (productId: string, shopId: string, barcode: string, excludedVariantId: string | null) => {
+  const barcodeSnapshot = await getDocs(query(
+    collection(db, 'productVariants'),
+    where('barcode', '==', barcode)
+  ));
+  const duplicate = barcodeSnapshot.docs.some((entry: any) => {
+    if (entry.id === excludedVariantId) return false;
+    const data = entry.data() as Record<string, any>;
+    const storedShopId = String(data.shopId || shopId);
+    return String(data.productId || '') === productId && storedShopId === shopId;
+  });
+  if (duplicate) throw new Error('This barcode is already assigned to this product in this shop.');
 };
 
 const fetchProductVariants = async (productId: string) => {
@@ -171,11 +203,13 @@ const closeVariantModal = () => {
   productVariants.value = [];
   variantInventoryById.value = {};
   variantError.value = '';
+  variantSuccess.value = '';
 };
 
 const createProductVariant = async () => {
   if (!db || !variantTargetProduct.value) return;
   variantError.value = '';
+  variantSuccess.value = '';
 
   const sku = variantForm.sku.trim().toUpperCase();
   const barcode = variantForm.barcode.trim();
@@ -200,21 +234,31 @@ const createProductVariant = async () => {
 
   variantSaving.value = true;
   try {
+    const productId = variantTargetProduct.value.id;
+    const productShopId = String(variantTargetProduct.value.shopId || shopId.value);
+    await ensureVariantBarcodeIsUnique(productId, productShopId, barcode, editingVariantId.value);
+
     const duplicateSkuSnapshot = await getDocs(query(collection(db, 'productVariants'), where('sku', '==', sku)));
-    if (!duplicateSkuSnapshot.empty) {
+    if (duplicateSkuSnapshot.docs.some((entry: any) => entry.id !== editingVariantId.value)) {
       variantError.value = 'This SKU is already assigned to another variant.';
       return;
     }
 
-    const variantRef = doc(db, 'productVariants', barcode);
+    const variantId = editingVariantId.value || barcode;
+    const variantRef = doc(db, 'productVariants', variantId);
     await runLoggedTransaction(db, async (firestoreTransaction: any) => {
-      const barcodeSnapshot = await firestoreTransaction.get(variantRef);
-      if (barcodeSnapshot.exists()) {
+      const variantSnapshot = await firestoreTransaction.get(variantRef);
+      if (!editingVariantId.value && variantSnapshot.exists()) {
         throw new Error('This barcode is already assigned to another variant.');
       }
+      const existingInventorySnapshot = await firestoreTransaction.get(doc(db, 'inventory', variantRef.id));
+      const existingInventory = existingInventorySnapshot.exists() ? existingInventorySnapshot.data() as Inventory : null;
+      const reservedQuantity = Number(existingInventory?.reservedQuantity || 0);
+      if (quantity < reservedQuantity) throw new Error('Quantity cannot be lower than the reserved inventory.');
 
       firestoreTransaction.set(variantRef, {
-        productId: variantTargetProduct.value!.id,
+        productId,
+        shopId: productShopId,
         sku,
         barcode,
         name,
@@ -225,12 +269,12 @@ const createProductVariant = async () => {
         variantId: variantRef.id,
         sku,
         quantity,
-        reservedQuantity: 0,
-        availableQuantity: quantity,
+        reservedQuantity,
+        availableQuantity: quantity - reservedQuantity,
         reorderLevel,
         updatedAt: serverTimestamp(),
       });
-      if (quantity > 0) {
+      if (!editingVariantId.value && quantity > 0) {
         firestoreTransaction.set(doc(collection(db, 'inventoryTransactions')), {
         variantId: variantRef.id,
         type: 'IN',
@@ -241,15 +285,40 @@ const createProductVariant = async () => {
         createdBy: authStore.user?.uid || '',
       });
       }
-    }, { barcode, sku, productId: variantTargetProduct.value.id }, {
+    }, { barcode, sku, productId, shopId: productShopId, variantId, operation: editingVariantId.value ? 'update' : 'create' }, {
       affectedCollections: ['productVariants', 'inventory', 'inventoryTransactions'],
     });
 
     await fetchProductVariants(variantTargetProduct.value.id);
     await fetchInventorySummaries(products.value.map((product: Product) => product.id));
+    const successMessage = editingVariantId.value ? 'Variant updated successfully.' : 'Variant created successfully.';
     resetVariantForm();
+    variantSuccess.value = successMessage;
   } catch (e: any) {
     variantError.value = e?.message || 'Failed to create product variant.';
+  } finally {
+    variantSaving.value = false;
+  }
+};
+
+const deleteVariant = async (variant: ProductVariant) => {
+  if (!db || !variantTargetProduct.value || variantSaving.value) return;
+  if (!confirm(`Delete the variant "${variant.name}"? Existing inventory history will be preserved.`)) return;
+  variantSaving.value = true;
+  variantError.value = '';
+  variantSuccess.value = '';
+  try {
+    await runLoggedTransaction(db, async (firestoreTransaction: any) => {
+      firestoreTransaction.delete(doc(db, 'productVariants', variant.id));
+      firestoreTransaction.delete(doc(db, 'inventory', variant.id));
+    }, { variantId: variant.id, productId: variantTargetProduct.value.id, operation: 'delete' }, {
+      affectedCollections: ['productVariants', 'inventory'],
+    });
+    await fetchProductVariants(variantTargetProduct.value.id);
+    await fetchInventorySummaries(products.value.map((product: Product) => product.id));
+    variantSuccess.value = 'Variant deleted successfully.';
+  } catch (e: any) {
+    variantError.value = e?.message || 'Failed to delete product variant.';
   } finally {
     variantSaving.value = false;
   }
@@ -822,6 +891,7 @@ onMounted(() => {
                   <th>Price</th>
                   <th>Quantity</th>
                   <th>Available</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -835,13 +905,21 @@ onMounted(() => {
                   <td>₱{{ Number(variant.price || 0).toFixed(2) }}</td>
                   <td>{{ variantInventoryById[variant.id]?.quantity ?? 0 }}</td>
                   <td>{{ variantInventoryById[variant.id]?.availableQuantity ?? 0 }}</td>
+                  <td class="variant-actions">
+                    <button type="button" class="btn-icon edit" title="Edit variant" :disabled="variantSaving" @click="openEditVariant(variant)">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                    <button type="button" class="btn-icon delete" title="Delete variant" :disabled="variantSaving" @click="deleteVariant(variant)">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                    </button>
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
 
           <div class="variant-form-divider"></div>
-          <div class="variant-section-heading">Create Variant</div>
+          <div class="variant-section-heading">{{ editingVariantId ? 'Edit Variant' : 'Create Variant' }}</div>
           <div class="form-grid variant-form-grid">
             <div class="field">
               <label>SKU</label>
@@ -877,12 +955,13 @@ onMounted(() => {
             </div>
           </div>
           <div v-if="variantError" class="error">{{ variantError }}</div>
+          <div v-if="variantSuccess" class="success">{{ variantSuccess }}</div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-ghost" @click="closeVariantModal">Close</button>
           <button class="btn btn-primary" :disabled="variantSaving" @click="createProductVariant">
             <span v-if="variantSaving">Creating...</span>
-            <span v-else>Create Variant</span>
+            <span v-else>{{ editingVariantId ? 'Save Variant' : 'Create Variant' }}</span>
           </button>
         </div>
       </div>
@@ -1030,6 +1109,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .checkbox { display: flex; align-items: center; gap: 10px; font-weight: 600; color: #0f172a; text-transform: none; cursor: pointer; font-size: 14px; }
 .checkbox input[type='checkbox'] { width: 18px; height: 18px; accent-color: #f59e0b; cursor: pointer; }
 .error { margin-top: 16px; font-size: 13px; color: #dc2626; background: #fef2f2; padding: 12px 14px; border-radius: 12px; border: 1px solid #fecaca; }
+.success { margin-top: 16px; font-size: 13px; color: #166534; background: #f0fdf4; padding: 12px 14px; border-radius: 12px; border: 1px solid #bbf7d0; }
 .state { padding: 40px; text-align: center; color: #64748b; background: #fff; border-radius: 20px; margin-top: 24px; font-weight: 600; }
 .state.empty { background: #f8fafc; border: 1px dashed #e2e8f0; }
 .product-list { list-style: none; padding: 0; margin: 0; }
@@ -1061,6 +1141,7 @@ textarea.input { resize: vertical; min-height: 64px; }
   .card { padding: 14px; }
   .form-grid { grid-template-columns: 1fr; }
   .form-grid .full { grid-column: span 1; }
+  .variant-form-grid { grid-template-columns: 1fr; }
   .header-actions { width: 100%; }
   .search-input { width: 100%; min-width: 0; }
   .data-table thead { display: none; }
@@ -1128,7 +1209,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .modal-body { padding: 24px; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 24px; border-top: 1px solid #f1f5f9; background: #f8fafc; border-radius: 0 0 20px 20px; }
 .stock-modal-card { max-width: 620px; }
-.variant-modal-card { max-width: 820px; }
+.variant-modal-card { max-width: min(1200px, calc(100vw - 40px)); }
 .variant-section-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: #0f172a; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; }
 .variant-count { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 999px; background: #ccfbf1; color: #0f766e; font-size: 11px; }
 .variant-empty { padding: 24px; border: 1px dashed #cbd5e1; border-radius: 10px; background: #f8fafc; color: #64748b; text-align: center; font-size: 13px; font-weight: 600; }
@@ -1140,7 +1221,8 @@ textarea.input { resize: vertical; min-height: 64px; }
 .variant-name { font-weight: 800; }
 .variant-description { margin-top: 2px; color: #64748b; font-size: 11px; }
 .variant-form-divider { height: 1px; margin: 24px 0; background: #e2e8f0; }
-.variant-form-grid { gap: 14px; }
+.variant-form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.variant-form-grid .full { grid-column: auto; }
 .stock-summary { background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 1px solid #fde68a; border-radius: 14px; padding: 14px; margin-bottom: 14px; }
 .stock-name { font-size: 15px; font-weight: 900; color: #78350f; margin-bottom: 10px; }
 .stock-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }

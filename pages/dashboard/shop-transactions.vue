@@ -212,21 +212,33 @@
     </div>
 
     <div v-if="showViewModal" class="modal-overlay" @click.self="closeViewModal">
-      <div class="modal-card">
+      <div class="modal-card transaction-modal">
         <div class="modal-header">
-          <h3>Transaction Details</h3>
-          <button class="close-btn" @click="closeViewModal">&times;</button>
+          <div class="modal-heading">
+            <span class="modal-eyebrow">Order details</span>
+            <h3>{{ selectedTransaction?.order_number || 'Transaction' }}</h3>
+          </div>
+          <button class="close-btn" type="button" aria-label="Close transaction details" @click="closeViewModal">&times;</button>
         </div>
-        <div class="modal-body" v-if="selectedTransaction">
-          <div class="detail-grid">
-            <div class="detail-item">
-              <span class="detail-label">Order Number</span>
-              <span class="detail-value">{{ selectedTransaction.order_number || '-' }}</span>
+        <div class="modal-body transaction-modal-body" v-if="selectedTransaction">
+          <div class="transaction-summary">
+            <div>
+              <span class="summary-label">Shop</span>
+              <strong>{{ shopMap[selectedTransaction.store_id || ''] || selectedTransaction.store_id || '-' }}</strong>
             </div>
-            <div class="detail-item">
-              <span class="detail-label">Date & Time</span>
-              <span class="detail-value">{{ formatDate(selectedTransaction.createdAt) }}</span>
+            <div>
+              <span class="summary-label">Placed</span>
+              <strong>{{ formatDate(selectedTransaction.createdAt) }}</strong>
             </div>
+            <div class="summary-total">
+              <span class="summary-label">Total</span>
+              <strong>{{ formatTotal(selectedTransaction) }}</strong>
+            </div>
+          </div>
+
+          <section class="detail-section">
+            <h4>Order</h4>
+            <div class="detail-grid">
             <div class="detail-item">
               <span class="detail-label">Status</span>
               <div class="detail-value">
@@ -247,6 +259,12 @@
               <span class="detail-label">Payment Method</span>
               <span class="detail-value">{{ selectedTransaction.payment_method || '-' }}</span>
             </div>
+            </div>
+          </section>
+
+          <section class="detail-section">
+            <h4>Fulfillment</h4>
+            <div class="detail-grid">
             <div class="detail-item">
               <span class="detail-label">Delivery Method</span>
               <span class="detail-value">{{ selectedTransaction.delivery_method || '-' }}</span>
@@ -258,6 +276,21 @@
                 {{ formatDeliveryTime(selectedTransaction) }}
               </span>
             </div>
+            <div v-if="canSelectDeliveryProvider" class="detail-item full">
+              <label class="detail-label" for="delivery-provider">Delivery Provider</label>
+              <select
+                id="delivery-provider"
+                class="status-select"
+                :value="selectedTransaction.delivery_provider_id || ''"
+                :disabled="isSavingDeliveryProvider"
+                @change="handleDeliveryProviderChange">
+                <option value="">Select a delivery provider</option>
+                <option v-for="provider in deliveryProviders" :key="provider.id" :value="provider.id">
+                  {{ provider.name }}
+                </option>
+              </select>
+              <span v-if="deliveryProviderError" class="field-error">{{ deliveryProviderError }}</span>
+            </div>
             <div class="detail-item">
               <span class="detail-label">Customer Mobile</span>
               <span class="detail-value">{{ selectedTransaction.customer_mobile || '-' }}</span>
@@ -266,6 +299,12 @@
               <span class="detail-label">Customer Note</span>
               <span class="detail-value">{{ selectedTransaction.customer_note || '-' }}</span>
             </div>
+            </div>
+          </section>
+
+          <section class="detail-section">
+            <h4>Delivery route</h4>
+            <div class="detail-grid">
             <div class="detail-item full">
               <span class="detail-label">Delivery Address</span>
               <span class="detail-value">{{ selectedTransaction.delivery_location?.address || '-' }}</span>
@@ -282,9 +321,14 @@
                 Receiver — Show Drive Map
               </a>
             </div>
-          </div>
+            </div>
+          </section>
 
-          <div class="section-title">Items</div>
+          <section class="detail-section items-section">
+            <div class="section-heading">
+              <h4>Items</h4>
+              <span>{{ selectedTransaction.items?.length || 0 }} item{{ selectedTransaction.items?.length === 1 ? '' : 's' }}</span>
+            </div>
           <table class="items-table">
             <thead>
               <tr>
@@ -321,6 +365,7 @@
               <span>{{ formatTotal(selectedTransaction) }}</span>
             </div>
           </div>
+          </section>
         </div>
       </div>
     </div>
@@ -408,6 +453,8 @@ interface Transaction {
   store_location?: { latitude?: number; longitude?: number };
   delivery_location?: { latitude?: number; longitude?: number; address?: string };
   delivery_method?: string;
+  delivery_provider_id?: string;
+  delivery_provider?: string;
   delivery_timing?: 'estimated' | 'scheduled';
   estimated_arrival?: any;
   requested_delivery_at?: any;
@@ -620,10 +667,17 @@ const mapUrl = (location?: { latitude?: number; longitude?: number }) => {
 const humanize = (str: string) => str.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
 const statusList = ref<any[]>([]);
+const deliveryProviders = ref<{ id: string; name: string }[]>([]);
+const memberShopIds = ref<string[]>([]);
 const statusMap = computed(() => Object.fromEntries(statusList.value.map((s: any) => [s.slug, s])));
 const canManageStatuses = computed(() => {
   const roleId = authStore.user?.roleId || '';
   return ['super-admin', 'store-admin', 'store-staff'].includes(roleId);
+});
+const canSelectDeliveryProvider = computed(() => {
+  const transaction = selectedTransaction.value;
+  if (!transaction?.store_id) return false;
+  return authStore.user?.roleId === 'store-admin' || memberShopIds.value.includes(transaction.store_id);
 });
 
 const displayStatus = (status?: string) => {
@@ -657,6 +711,38 @@ const handleStatusChange = (event: Event, tx: Transaction | null) => {
   const target = event.target as HTMLSelectElement | null;
   if (!target || !tx) return;
   void updateTransactionStatus(tx, target.value);
+};
+
+const isSavingDeliveryProvider = ref(false);
+const deliveryProviderError = ref('');
+
+const handleDeliveryProviderChange = async (event: Event) => {
+  const target = event.target as HTMLSelectElement;
+  const transaction = selectedTransaction.value;
+  const provider = deliveryProviders.value.find((item: { id: string; name: string }) => item.id === target.value);
+  if (!transaction?.id || !canSelectDeliveryProvider.value) return;
+
+  deliveryProviderError.value = '';
+  isSavingDeliveryProvider.value = true;
+  const previousId = transaction.delivery_provider_id;
+  const previousName = transaction.delivery_provider;
+  transaction.delivery_provider_id = provider?.id || '';
+  transaction.delivery_provider = provider?.name || '';
+
+  try {
+    await updateDoc(doc(db, 'transactions', transaction.id), {
+      delivery_provider_id: transaction.delivery_provider_id,
+      delivery_provider: transaction.delivery_provider,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error: any) {
+    transaction.delivery_provider_id = previousId;
+    transaction.delivery_provider = previousName;
+    target.value = previousId || '';
+    deliveryProviderError.value = error?.message || 'Failed to update the delivery provider.';
+  } finally {
+    isSavingDeliveryProvider.value = false;
+  }
 };
 
 const selectedTransaction = ref<Transaction | null>(null);
@@ -694,6 +780,7 @@ const handleFeedbackMenuAction = (tx: Transaction) => {
 const closeViewModal = () => {
   showViewModal.value = false;
   selectedTransaction.value = null;
+  deliveryProviderError.value = '';
 };
 
 const openFeedbackModal = async (tx: Transaction) => {
@@ -709,7 +796,7 @@ const openFeedbackModal = async (tx: Transaction) => {
   if (db && tx?.id) {
     try {
       const q = query(collection(db, 'transaction_feedbacks'), where('transactionId', '==', tx.id));
-      const snap = await getDocs(q);
+      const snap = await getDocsWithPermissionLog(q, 'transaction_feedbacks');
       feedbackedProductIds.value = snap.docs.map((d: any) => d.data().productId).filter(Boolean);
     } catch (e) {
       // ignore fetch errors for now
@@ -794,12 +881,24 @@ const getShopMapByIds = async (shopIds: string[]) => {
   }
 
   const shopSnaps = await Promise.all(
-    chunks.map(ids => getDocs(query(collection(db, 'shops'), where(documentId(), 'in', ids))))
+    chunks.map(ids => getDocsWithPermissionLog(query(collection(db, 'shops'), where(documentId(), 'in', ids)), 'shops'))
   );
 
   return Object.fromEntries(
     shopSnaps.flatMap((snap: any) => snap.docs.map((d: any) => [d.id, d.data().name || d.id]))
   ) as Record<string, string>;
+};
+
+const getDocsWithPermissionLog = async (reference: any, collectionName: string) => {
+  try {
+    return await getDocs(reference);
+  } catch (error: any) {
+    if (error?.code === 'permission-denied' || error?.code === 'not-found') {
+      //console.log(`[Firestore collection issue] ${collectionName}`);
+      return { docs: [] } as any;
+    }
+    throw error;
+  }
 };
 
 const fetchTransactions = async () => {
@@ -810,19 +909,31 @@ const fetchTransactions = async () => {
     const uid = authStore.user?.uid || '';
     const roleId = authStore.user?.roleId || '';
 
-    let shopIdFilter: string[] | null = null;
+    let shopIdFilter: string[] = [];
     const isStoreAdmin = roleId === 'store-admin';
 
-    const statusSnap = await getDocs(collection(db, 'transaction_statuses'));
+    const [statusSnap, providersSnap, currentMembershipsSnap] = await Promise.all([
+      getDocsWithPermissionLog(collection(db, 'transaction_statuses'), 'transaction_statuses'),
+      getDocsWithPermissionLog(collection(db, 'deliveryProviders'), 'deliveryProviders'),
+      uid
+        ? getDocsWithPermissionLog(query(collection(db, 'shopMembers'), where('uid', '==', uid)), 'shopMembers')
+        : Promise.resolve(null),
+    ]);
     statusList.value = statusSnap.docs.map((d: any) => d.data());
+    deliveryProviders.value = providersSnap.docs
+      .map((d: any) => ({ id: d.id, name: String(d.data().name || d.id) }))
+      .sort((left: { id: string; name: string }, right: { id: string; name: string }) => left.name.localeCompare(right.name));
+    memberShopIds.value = currentMembershipsSnap
+      ? currentMembershipsSnap.docs.map((d: any) => d.data().shopId).filter(Boolean)
+      : [];
 
     let fetched: Transaction[] = [];
 
     if (isStoreAdmin) {
-      const ownerShopsSnap = await getDocs(query(collection(db, 'shops'), where('ownerId', '==', uid)));
+      const ownerShopsSnap = await getDocsWithPermissionLog(query(collection(db, 'shops'), where('ownerId', '==', uid)), 'shops');
       const ownerShopIds = ownerShopsSnap.docs.map((d: any) => d.id).filter(Boolean);
 
-      const membersSnap = await getDocs(query(collection(db, 'shopMembers'), where('uid', '==', uid)));
+      const membersSnap = await getDocsWithPermissionLog(query(collection(db, 'shopMembers'), where('uid', '==', uid)), 'shopMembers');
       const memberShopIds = membersSnap.docs.map((d: any) => d.data().shopId).filter(Boolean);
 
       const allowedShopIds = [...new Set([...ownerShopIds, ...memberShopIds])];
@@ -832,7 +943,7 @@ const fetchTransactions = async () => {
           chunks.push(allowedShopIds.slice(i, i + 30));
         }
         const txSnaps = await Promise.all(
-          chunks.map(ids => getDocs(query(collection(db, 'transactions'), where('store_id', 'in', ids))))
+          chunks.map(ids => getDocsWithPermissionLog(query(collection(db, 'transactions'), where('store_id', 'in', ids)), 'transactions'))
         );
         fetched = txSnaps.flatMap((snap: any) => snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
         shopMap.value = await getShopMapByIds(allowedShopIds);
@@ -841,7 +952,7 @@ const fetchTransactions = async () => {
         shopMap.value = {};
       }
     } else if (roleId === 'store-staff') {
-      const membersSnap = await getDocs(query(collection(db, 'shopMembers'), where('uid', '==', uid)));
+      const membersSnap = await getDocsWithPermissionLog(query(collection(db, 'shopMembers'), where('uid', '==', uid)), 'shopMembers');
       shopIdFilter = membersSnap.docs.map((d: any) => d.data().shopId).filter(Boolean);
       if (shopIdFilter.length) {
         const chunks: string[][] = [];
@@ -849,27 +960,27 @@ const fetchTransactions = async () => {
           chunks.push(shopIdFilter.slice(i, i + 30));
         }
         const txSnaps = await Promise.all(
-          chunks.map(ids => getDocs(query(collection(db, 'transactions'), where('store_id', 'in', ids))))
+          chunks.map(ids => getDocsWithPermissionLog(query(collection(db, 'transactions'), where('store_id', 'in', ids)), 'transactions'))
         );
         fetched = txSnaps.flatMap((snap: any) => snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
       } else {
         fetched = [];
       }
     } else if (roleId === 'store-delivery') {
-      const membersSnap = await getDocs(query(collection(db, 'shopMembers'), where('uid', '==', uid)));
+      const membersSnap = await getDocsWithPermissionLog(query(collection(db, 'shopMembers'), where('uid', '==', uid)), 'shopMembers');
       shopIdFilter = membersSnap.docs.map((d: any) => d.data().shopId).filter(Boolean);
-      const txSnap = await getDocs(collection(db, 'transactions'));
+      const txSnap = await getDocsWithPermissionLog(collection(db, 'transactions'), 'transactions');
       fetched = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
       if (shopIdFilter) {
         fetched = fetched.filter(tx => tx.store_id && shopIdFilter!.includes(tx.store_id));
       }
     } else {
-      const txSnap = await getDocs(collection(db, 'transactions'));
+      const txSnap = await getDocsWithPermissionLog(collection(db, 'transactions'), 'transactions');
       fetched = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
     }
 
     if (!isStoreAdmin) {
-      const shopSnap = await getDocs(collection(db, 'shops'));
+      const shopSnap = await getDocsWithPermissionLog(collection(db, 'shops'), 'shops');
       shopMap.value = Object.fromEntries(shopSnap.docs.map((d: any) => [d.id, d.data().name || d.id]));
     }
     fetched.sort((a, b) => {
@@ -1012,12 +1123,24 @@ onBeforeUnmount(() => {
 .btn-action.feedback { color: #0f766e; background: #ccfbf1; border-color: #99f6e4; }
 .btn-action.feedback:hover { background: #99f6e4; }
 .modal-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 20px; }
-.modal-card { width: 100%; max-width: 620px; max-height: 90vh; overflow-y: auto; background: #fff; border-radius: 24px; box-shadow: 0 24px 60px rgba(0,0,0,0.2); }
-.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #f1f5f9; }
-.modal-header h3 { margin: 0; font-size: 18px; font-weight: 800; color: #0f172a; }
-.close-btn { background: none; border: none; font-size: 24px; color: #64748b; cursor: pointer; }
+.modal-card { width: 100%; max-width: 620px; max-height: 90vh; overflow-y: auto; background: #fff; border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,0.2); }
+.transaction-modal { max-width: 760px; border: 1px solid rgba(255,255,255,0.7); }
+.modal-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 18px 24px; border-bottom: 1px solid #e2e8f0; background: rgba(255,255,255,0.96); backdrop-filter: blur(12px); }
+.modal-heading { display: grid; gap: 3px; }
+.modal-eyebrow { color: #64748b; font-size: 10px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase; }
+.modal-header h3 { margin: 0; font-size: 20px; font-weight: 900; color: #0f172a; }
+.close-btn { width: 36px; height: 36px; padding: 0; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; color: #475569; display: inline-flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; }
+.close-btn:hover { border-color: #cbd5e1; background: #f1f5f9; color: #0f172a; }
 .modal-body { padding: 24px; }
-.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+.transaction-modal-body { display: grid; gap: 18px; background: #f8fafc; }
+.transaction-summary { display: grid; grid-template-columns: 1.2fr 1fr auto; gap: 18px; padding: 18px 20px; border: 1px solid #dbeafe; border-radius: 10px; background: #eff6ff; }
+.transaction-summary > div { min-width: 0; display: grid; gap: 4px; }
+.summary-label { color: #64748b; font-size: 10px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; }
+.transaction-summary strong { color: #0f172a; font-size: 14px; overflow-wrap: anywhere; }
+.transaction-summary .summary-total strong { color: #1d4ed8; font-size: 20px; }
+.detail-section { padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; }
+.detail-section h4 { margin: 0 0 16px; color: #0f172a; font-size: 13px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; }
 .detail-item { display: flex; flex-direction: column; gap: 4px; }
 .detail-item.full { grid-column: span 2; }
 .detail-label { font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -1058,8 +1181,10 @@ onBeforeUnmount(() => {
   }
 .map-link { color: #4f46e5; text-decoration: none; }
 .map-link:hover { text-decoration: underline; }
-.section-title { font-size: 14px; font-weight: 800; color: #0f172a; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-.items-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.section-heading h4 { margin: 0; }
+.section-heading span { color: #64748b; font-size: 12px; font-weight: 700; }
+.items-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
 .items-table th { text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
 .items-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
 .product-link { color: #4f46e5; text-decoration: none; font-weight: 600; }
@@ -1077,9 +1202,12 @@ onBeforeUnmount(() => {
   .pagination .btn { min-width: 0; padding: 9px 12px; }
   .page-info { font-size: 12px; white-space: nowrap; }
   .modal-overlay { padding: 10px; }
-  .modal-card { max-height: calc(100vh - 20px); border-radius: 16px; }
+  .modal-card { max-height: calc(100vh - 20px); border-radius: 12px; }
   .modal-header { padding: 16px; }
-  .modal-body { padding: 16px; }
+  .modal-body { padding: 12px; }
+  .transaction-summary { grid-template-columns: 1fr 1fr; padding: 16px; }
+  .transaction-summary .summary-total { grid-column: span 2; }
+  .detail-section { padding: 16px; }
   .detail-grid { grid-template-columns: 1fr; }
   .detail-item.full { grid-column: auto; }
   .detail-value { overflow-wrap: anywhere; }

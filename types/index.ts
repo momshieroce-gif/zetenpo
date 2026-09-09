@@ -72,6 +72,7 @@ export interface ProductVariantAttributes {
 export interface ProductVariant {
   id: string;
   productId: string;
+  shopId?: string;
   sku: string;
   barcode?: string;
   name: string;
