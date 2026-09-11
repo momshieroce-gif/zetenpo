@@ -756,8 +756,8 @@ const save = async () => {
     focusFormError();
     return;
   }
-  const latUnchanged = Number(form.latitude) === Number(initialLatitude.value);
-  const lngUnchanged = Number(form.longitude) === Number(initialLongitude.value);
+  const latUnchanged = String(form.latitude).length <= 6 && Number(form.latitude) === Number(initialLatitude.value);
+  const lngUnchanged = String(form.longitude).length <= 6 && Number(form.longitude) === Number(initialLongitude.value);
   if (latUnchanged && lngUnchanged) {
     formError.value = 'Latitude and longitude have not changed. Please detect shop location before saving.';
     focusFormError();

@@ -219,11 +219,11 @@ const createProductVariant = async () => {
   const price = Number(variantForm.price);
   const quantity = Number(variantForm.quantity);
   const reorderLevel = Number(variantForm.reorderLevel);
-  if (!sku || !barcode || !name || !size || !color) {
-    variantError.value = 'SKU, barcode, variant name, size, and color are required.';
+  if (!sku || !name || !size || !color) {
+    variantError.value = 'SKU, variant name, size, and color are required.';
     return;
   }
-  if (!isValidEan13(barcode)) {
+  if (barcode && !isValidEan13(barcode)) {
     variantError.value = 'Barcode must be a valid 13-digit EAN-13 barcode.';
     return;
   }
@@ -236,7 +236,9 @@ const createProductVariant = async () => {
   try {
     const productId = variantTargetProduct.value.id;
     const productShopId = String(variantTargetProduct.value.shopId || shopId.value);
-    await ensureVariantBarcodeIsUnique(productId, productShopId, barcode, editingVariantId.value);
+    if (barcode) {
+      await ensureVariantBarcodeIsUnique(productId, productShopId, barcode, editingVariantId.value);
+    }
 
     const duplicateSkuSnapshot = await getDocs(query(collection(db, 'productVariants'), where('sku', '==', sku)));
     if (duplicateSkuSnapshot.docs.some((entry: any) => entry.id !== editingVariantId.value)) {
@@ -244,11 +246,11 @@ const createProductVariant = async () => {
       return;
     }
 
-    const variantId = editingVariantId.value || barcode;
+    const variantId = editingVariantId.value || barcode || doc(collection(db, 'productVariants')).id;
     const variantRef = doc(db, 'productVariants', variantId);
     await runLoggedTransaction(db, async (firestoreTransaction: any) => {
       const variantSnapshot = await firestoreTransaction.get(variantRef);
-      if (!editingVariantId.value && variantSnapshot.exists()) {
+      if (!editingVariantId.value && barcode && variantSnapshot.exists()) {
         throw new Error('This barcode is already assigned to another variant.');
       }
       const existingInventorySnapshot = await firestoreTransaction.get(doc(db, 'inventory', variantRef.id));
@@ -551,6 +553,11 @@ const fetchShop = async () => {
   }
 };
 
+const truncateText = (text: string, maxLength = 15) => {
+  const value = text || '';
+  return value.length > maxLength ? value.slice(0, maxLength) + '…' : value;
+};
+
 const timestampToMillis = (v: any) => {
   if (!v) return 0;
   if (typeof v.toMillis === 'function') return v.toMillis();
@@ -805,7 +812,122 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-if="showProductModal" class="modal-overlay" @click.self="closeProductModal">
+
+
+    <div v-if="loading" class="state loading">Loading products...</div>
+    <div v-else-if="fetchError" class="state error">{{ fetchError }}</div>
+    <div v-else-if="!products.length" class="state empty">No products yet.</div>
+    <div v-else-if="!filteredProducts.length" class="state empty">No products found for "{{ searchName }}".</div>
+    <div v-else class="card">
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Price</th>
+              <th>Inventory Quantity</th>
+              <th>Availability</th>
+              <th class="actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in paginatedProducts" :key="p.id">
+              <td data-label="Product">
+                <div class="product-name" :title="p.name">{{ truncateText(p.name) }}</div>
+              </td>
+              <td data-label="Price">₱{{ (p.price || 0).toFixed(2) }}</td>
+              <td data-label="Inventory Quantity">{{ inventorySummaryByProductId[p.id]?.quantity ?? 0 }}</td>
+              <td data-label="Availability">
+                <span class="badge" :class="p.isActive ? 'badge-success' : 'badge-inactive'">
+                  <span class="dot"></span>
+                  {{ p.isActive ? 'Available' : 'Unavailable' }}
+                </span>
+              </td>
+              <td data-label="Actions" class="actions">
+                <button class="btn-variants" @click="openVariantModal(p)">Variants</button>
+                <button class="btn-stock" @click="openStockModal(p)">Stocks</button>
+                <button class="btn-icon edit" @click="openEditProduct(p)" title="Edit">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button class="btn-icon delete" @click="softDelete(p.id)" title="Delete">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-if="filteredProducts.length > itemsPerPage" class="pagination">
+        <button class="btn btn-ghost" :disabled="currentPage === 1" @click="goToPreviousPage">Previous</button>
+        <span class="pagination-info">Page {{ currentPage }} of {{ totalPages }}</span>
+        <button class="btn btn-ghost" :disabled="currentPage === totalPages" @click="goToNextPage">Next</button>
+      </div>
+    </div>
+
+    <div v-if="showStockModal" class="modal-overlay">
+      <div class="modal-card stock-modal-card">
+        <div class="modal-header">
+          <h3>Add Product Stock</h3>
+          <button class="close-btn" @click="closeStockModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="stock-summary">
+            <div class="stock-name">{{ stockTargetProduct?.name || '-' }}</div>
+            <div class="stock-grid">
+              <div>
+                <div class="stock-label">Current Stock</div>
+                <div class="stock-value">{{ stockBaseValue }}</div>
+              </div>
+              <div>
+                <div class="stock-label">Projected Stock</div>
+                <div class="stock-value" :class="stockProjectedValue < 0 ? 'danger' : 'ok'">{{ stockProjectedValue }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-grid stock-form-grid">
+            <div class="field full">
+              <label>Product Variant</label>
+              <select v-model="stockForm.variantId" class="input" :disabled="stockVariantsLoading || !stockVariants.length">
+                <option value="" disabled>{{ stockVariantsLoading ? 'Loading variants...' : 'Select a variant' }}</option>
+                <option v-for="variant in stockVariants" :key="variant.id" :value="variant.id">
+                  {{ variant.attributes.size }} / {{ variant.attributes.color }} - {{ variant.sku }}
+                </option>
+              </select>
+              <div v-if="selectedStockVariant" class="selected-variant-meta">
+                <span>{{ selectedStockVariant.name }}</span>
+                <span class="variant-sku">{{ selectedStockVariant.sku }}</span>
+              </div>
+            </div>
+            <div class="field">
+              <label>Movement Type</label>
+              <select v-model="stockForm.movementType" class="input">
+                <option value="in">Stock In</option>
+                <option value="out">Stock Out</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Quantity</label>
+              <input v-model.number="stockForm.quantity" type="number" min="1" step="1" class="input" placeholder="1" />
+            </div>
+            <div class="field full">
+              <label>Note (Optional)</label>
+              <textarea v-model="stockForm.note" class="input" rows="2" placeholder="Reason or remarks"></textarea>
+            </div>
+          </div>
+
+          <div v-if="stockError" class="error">{{ stockError }}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" @click="closeStockModal">Cancel</button>
+          <button class="btn btn-primary" :disabled="stockSaving || stockVariantsLoading || !selectedStockInventory" @click="applyStockMovement">
+            <span v-if="stockSaving">Saving...</span>
+            <span v-else>Save Stock Movement</span>
+          </button>
+        </div>
+      </div>
+    </div>
+        <div v-if="showProductModal" class="modal-overlay">
       <div class="modal-card">
         <div class="modal-header">
           <h3>{{ isEditing ? 'Edit Product' : 'Add Product' }}</h3>
@@ -865,7 +987,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-if="showVariantModal" class="modal-overlay" @click.self="closeVariantModal">
+    <div v-if="showVariantModal" class="modal-overlay">
       <div class="modal-card variant-modal-card">
         <div class="modal-header">
           <div>
@@ -926,7 +1048,7 @@ onMounted(() => {
               <input v-model="variantForm.sku" type="text" class="input" placeholder="MNS-SHIRT-BLK-M" />
             </div>
             <div class="field">
-              <label>Barcode (EAN-13)</label>
+              <label>Barcode (EAN-13, Optional)</label>
               <input v-model="variantForm.barcode" type="text" inputmode="numeric" maxlength="13" class="input" placeholder="4801234567891" />
             </div>
             <div class="field">
@@ -962,121 +1084,6 @@ onMounted(() => {
           <button class="btn btn-primary" :disabled="variantSaving" @click="createProductVariant">
             <span v-if="variantSaving">Creating...</span>
             <span v-else>{{ editingVariantId ? 'Save Variant' : 'Create Variant' }}</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="loading" class="state loading">Loading products...</div>
-    <div v-else-if="fetchError" class="state error">{{ fetchError }}</div>
-    <div v-else-if="!products.length" class="state empty">No products yet.</div>
-    <div v-else-if="!filteredProducts.length" class="state empty">No products found for "{{ searchName }}".</div>
-    <div v-else class="card">
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th>Price</th>
-              <th>Inventory Quantity</th>
-              <th>Availability</th>
-              <th class="actions">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="p in paginatedProducts" :key="p.id">
-              <td data-label="Product">
-                <div class="product-name">{{ p.name }}</div>
-                <div class="product-desc">{{ p.description || '-' }}</div>
-              </td>
-              <td data-label="Price">₱{{ (p.price || 0).toFixed(2) }}</td>
-              <td data-label="Inventory Quantity">{{ inventorySummaryByProductId[p.id]?.quantity ?? 0 }}</td>
-              <td data-label="Availability">
-                <span class="badge" :class="p.isActive ? 'badge-success' : 'badge-inactive'">
-                  <span class="dot"></span>
-                  {{ p.isActive ? 'Available' : 'Unavailable' }}
-                </span>
-              </td>
-              <td data-label="Actions" class="actions">
-                <button class="btn-variants" @click="openVariantModal(p)">Variants</button>
-                <button class="btn-stock" @click="openStockModal(p)">Stocks</button>
-                <button class="btn-icon edit" @click="openEditProduct(p)" title="Edit">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                </button>
-                <button class="btn-icon delete" @click="softDelete(p.id)" title="Delete">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div v-if="filteredProducts.length > itemsPerPage" class="pagination">
-        <button class="btn btn-ghost" :disabled="currentPage === 1" @click="goToPreviousPage">Previous</button>
-        <span class="pagination-info">Page {{ currentPage }} of {{ totalPages }}</span>
-        <button class="btn btn-ghost" :disabled="currentPage === totalPages" @click="goToNextPage">Next</button>
-      </div>
-    </div>
-
-    <div v-if="showStockModal" class="modal-overlay" @click.self="closeStockModal">
-      <div class="modal-card stock-modal-card">
-        <div class="modal-header">
-          <h3>Add Product Stock</h3>
-          <button class="close-btn" @click="closeStockModal">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="stock-summary">
-            <div class="stock-name">{{ stockTargetProduct?.name || '-' }}</div>
-            <div class="stock-grid">
-              <div>
-                <div class="stock-label">Current Stock</div>
-                <div class="stock-value">{{ stockBaseValue }}</div>
-              </div>
-              <div>
-                <div class="stock-label">Projected Stock</div>
-                <div class="stock-value" :class="stockProjectedValue < 0 ? 'danger' : 'ok'">{{ stockProjectedValue }}</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-grid stock-form-grid">
-            <div class="field full">
-              <label>Product Variant</label>
-              <select v-model="stockForm.variantId" class="input" :disabled="stockVariantsLoading || !stockVariants.length">
-                <option value="" disabled>{{ stockVariantsLoading ? 'Loading variants...' : 'Select a variant' }}</option>
-                <option v-for="variant in stockVariants" :key="variant.id" :value="variant.id">
-                  {{ variant.attributes.size }} / {{ variant.attributes.color }} - {{ variant.sku }}
-                </option>
-              </select>
-              <div v-if="selectedStockVariant" class="selected-variant-meta">
-                <span>{{ selectedStockVariant.name }}</span>
-                <span class="variant-sku">{{ selectedStockVariant.sku }}</span>
-              </div>
-            </div>
-            <div class="field">
-              <label>Movement Type</label>
-              <select v-model="stockForm.movementType" class="input">
-                <option value="in">Stock In</option>
-                <option value="out">Stock Out</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Quantity</label>
-              <input v-model.number="stockForm.quantity" type="number" min="1" step="1" class="input" placeholder="1" />
-            </div>
-            <div class="field full">
-              <label>Note (Optional)</label>
-              <textarea v-model="stockForm.note" class="input" rows="2" placeholder="Reason or remarks"></textarea>
-            </div>
-          </div>
-
-          <div v-if="stockError" class="error">{{ stockError }}</div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-ghost" @click="closeStockModal">Cancel</button>
-          <button class="btn btn-primary" :disabled="stockSaving || stockVariantsLoading || !selectedStockInventory" @click="applyStockMovement">
-            <span v-if="stockSaving">Saving...</span>
-            <span v-else>Save Stock Movement</span>
           </button>
         </div>
       </div>
