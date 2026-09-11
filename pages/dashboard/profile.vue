@@ -54,6 +54,12 @@
                 {{ detecting ? 'Detecting...' : 'Detect my location' }}
               </button>
             </div>
+            <div v-if="canToggleSeller" class="form-group full">
+              <label class="checkbox-label">
+                <input v-model="form.wantToSell" type="checkbox" class="form-checkbox" />
+                I want to sell my products
+              </label>
+            </div>
           </div>
 
           <div v-if="message" class="alert" :class="messageType">{{ message }}</div>
@@ -82,6 +88,7 @@ interface Profile {
   email?: string;
   phone?: string;
   role?: string;
+  roleId?: string;
   address?: string;
   latitude?: number;
   longitude?: number;
@@ -116,7 +123,11 @@ const form = ref({
   address: '',
   latitude: 0,
   longitude: 0,
+  wantToSell: false,
 });
+
+// Toggle only makes sense for customers and store admins
+const canToggleSeller = computed(() => ['customer', 'store-admin'].includes(profile.value?.roleId || ''));
 
 const loadProfile = async () => {
   loading.value = true;
@@ -138,6 +149,7 @@ const loadProfile = async () => {
       address: (data as any).address || '',
       latitude: data.latitude || 0,
       longitude: data.longitude || 0,
+      wantToSell: data.roleId === 'store-admin',
     };
   } catch (e: any) {
     fetchError.value = e?.message || 'Failed to load profile.';
@@ -152,6 +164,16 @@ const saveProfile = async () => {
   message.value = '';
   try {
     if (!db) throw new Error('Firebase is not available.');
+
+    const currentRoleId = profile.value.roleId || '';
+    let newRoleId = currentRoleId;
+    if (form.value.wantToSell) {
+      newRoleId = 'store-admin';
+    } else if (currentRoleId === 'store-admin') {
+      newRoleId = 'customer';
+    }
+    const newRoleLabel = newRoleId === 'store-admin' ? 'Store Admin' : newRoleId === 'customer' ? 'Customer' : form.value.role;
+
     await updateDoc(doc(db, 'users', profile.value.id), {
       name: form.value.name,
       displayName: form.value.name,
@@ -159,8 +181,13 @@ const saveProfile = async () => {
       address: form.value.address,
       latitude: form.value.latitude,
       longitude: form.value.longitude,
+      roleId: newRoleId,
+      role: newRoleLabel,
       updatedAt: serverTimestamp(),
     });
+    profile.value.roleId = newRoleId;
+    profile.value.role = newRoleLabel;
+    form.value.role = newRoleLabel;
     message.value = 'Profile saved successfully.';
     messageType.value = 'success';
   } catch (e: any) {
@@ -222,6 +249,8 @@ onMounted(() => {
 .form-input { padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 12px; font-size: 14px; color: #0f172a; background: #fff; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
 .form-input:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
 .form-input:disabled { background: #f8fafc; color: #94a3b8; cursor: not-allowed; }
+.checkbox-label { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; color: #334155; cursor: pointer; }
+.form-checkbox { width: 18px; height: 18px; accent-color: #4f46e5; cursor: pointer; }
 .form-actions { display: flex; justify-content: flex-end; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; font-weight: 700; font-size: 14px; border: none; cursor: pointer; transition: all 0.2s; }
 .btn-primary { padding: 12px 24px; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: #fff; box-shadow: 0 8px 20px rgba(79,70,229,0.25); }

@@ -154,7 +154,7 @@
       </div>
     </div>
 
-    <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
+    <div v-if="showModal" class="modal-overlay">
       <div class="modal-card">
         <div class="modal-header">
           <h3>{{ isEditing ? 'Edit Shop' : 'Add Shop' }}</h3>
@@ -216,7 +216,7 @@
       </div>
     </div>
 
-    <div v-if="showMembersModal" class="modal-overlay" @click.self="closeMembersModal">
+    <div v-if="showMembersModal" class="modal-overlay">
       <div class="modal-card">
         <div class="modal-header">
           <h3>{{ selectedShopForMembers?.name || 'Shop' }} - Members</h3>
@@ -257,7 +257,7 @@
       </div>
     </div>
 
-    <div v-if="showDeleteModal" class="modal-overlay" @click.self="closeDeleteModal">
+    <div v-if="showDeleteModal" class="modal-overlay">
       <div class="modal-card">
         <div class="modal-header">
           <h3>Confirm Delete</h3>
@@ -273,7 +273,7 @@
       </div>
     </div>
 
-    <div v-if="showProductsModal" class="modal-overlay" @click.self="closeProductsModal">
+    <div v-if="showProductsModal" class="modal-overlay">
       <div class="modal-card product-modal">
         <div class="modal-header">
           <h3>{{ selectedShopForProducts?.name || 'Shop' }} - Products</h3>
