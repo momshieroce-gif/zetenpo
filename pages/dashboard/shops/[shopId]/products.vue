@@ -654,6 +654,9 @@ const goToNextPage = () => {
 };
 
 const resolveCurrentPlanId = async (uid: string) => {
+  // Temporary subscription gate disabled while we keep the original logic in place for later re-enablement.
+  return 'free';
+  // Legacy logic retained below for when subscriptions are re-enabled.
   if (!db) return 'free';
   const subscriptionsSnap = await getDocs(query(collection(db, 'subscriptions'), where('userId', '==', uid)));
   if (subscriptionsSnap.empty) return 'free';
@@ -685,6 +688,9 @@ const countActiveProductsForShop = async () => {
 };
 
 const enforceProductLimitForCreate = async () => {
+  const subscriptionsEnabled = false;
+  if (!subscriptionsEnabled) return true;
+
   if (!db) {
     formError.value = 'Firebase is not available.';
     return false;

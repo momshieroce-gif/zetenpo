@@ -39,7 +39,7 @@ export default defineNuxtPlugin({
     });
   });
 
-  nuxtApp.hook('app:beforeUnmount', () => {
+  (nuxtApp as any).hook('app:beforeUnmount', () => {
     unsubscribeAuth();
     unsubscribeUserDocument?.();
   });

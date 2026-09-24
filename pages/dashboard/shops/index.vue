@@ -191,7 +191,13 @@
               <label>Upload business permit or government ID</label>
               <input type="file" accept="image/*,video/*" class="input" :disabled="saving" @change="onPermitFileChange" />
               <small v-if="permitFile" class="upload-meta">Selected: {{ permitFile.name }}</small>
-              <small v-else-if="permitUploadUrl" class="upload-meta">Existing file is attached.</small>
+              <template v-else-if="permitUploadUrl">
+                <button v-if="isSuperAdmin && isPermitImage" type="button" class="permit-preview" @click="showPermitViewer = true">
+                  <img :src="permitUploadUrl" alt="Attached business permit or government ID" />
+                  <span>View attached image</span>
+                </button>
+                <small v-else class="upload-meta">Existing file is attached.</small>
+              </template>
             </div>
             <div class="field full">
               <label>Description</label>
@@ -253,6 +259,18 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-ghost" @click="closeMembersModal">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showPermitViewer" class="modal-overlay permit-viewer-overlay" @click.self="showPermitViewer = false">
+      <div class="permit-viewer" role="dialog" aria-modal="true" aria-label="Business permit or government ID preview">
+        <div class="modal-header">
+          <h3>Attached document</h3>
+          <button class="close-btn" aria-label="Close image preview" @click="showPermitViewer = false">&times;</button>
+        </div>
+        <div class="permit-viewer-body">
+          <img :src="permitUploadUrl" alt="Attached business permit or government ID" />
         </div>
       </div>
     </div>
@@ -382,6 +400,8 @@ const shopNameCheckDelayMs = 800;
 const permitFile = ref<File | null>(null);
 const permitUploadUrl = ref('');
 const permitUploadPath = ref('');
+const permitUploadType = ref('');
+const showPermitViewer = ref(false);
 const productForm = reactive({
   name: '',
   description: '',
@@ -394,6 +414,7 @@ const currentPage = ref(1);
 const searchQuery = ref('');
 const currentUserRole = computed(() => String(authStore.user?.role || authStore.user?.roleId || '').trim().toLowerCase());
 const isSuperAdmin = computed(() => currentUserRole.value === 'super-admin' || currentUserRole.value === 'super admin');
+const isPermitImage = computed(() => !permitUploadType.value || permitUploadType.value.startsWith('image/'));
 const filteredShops = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   if (!q) return shops.value;
@@ -559,6 +580,8 @@ const resetForm = () => {
   permitFile.value = null;
   permitUploadUrl.value = '';
   permitUploadPath.value = '';
+  permitUploadType.value = '';
+  showPermitViewer.value = false;
   isEditing.value = false;
   editingId.value = null;
   formError.value = '';
@@ -587,11 +610,14 @@ const openEdit = (shop: Shop) => {
   permitFile.value = null;
   permitUploadUrl.value = (shop as any).businessPermitUrl || '';
   permitUploadPath.value = (shop as any).businessPermitPath || '';
+  permitUploadType.value = (shop as any).businessPermitType || '';
+  showPermitViewer.value = false;
   showModal.value = true;
 };
 
 const closeModal = () => {
   showModal.value = false;
+  showPermitViewer.value = false;
   resetForm();
 };
 
@@ -704,6 +730,9 @@ const fetchShops = async () => {
 };
 
 const resolveCurrentPlanId = async (uid: string) => {
+  // Temporary subscription gate disabled while we keep the original logic in place for later re-enablement.
+  return 'free';
+  // Legacy logic retained below for when subscriptions are re-enabled.
   if (!db) return 'free';
   const subscriptionsSnap = await getDocs(query(collection(db, 'subscriptions'), where('userId', '==', uid)));
   if (subscriptionsSnap.empty) return 'free';
@@ -782,19 +811,22 @@ const save = async () => {
       return;
     }
 
-    const planId = await resolveCurrentPlanId(uid);
-    const maxShops = SHOP_LIMITS_BY_PLAN[planId] || SHOP_LIMITS_BY_PLAN.free;
-    const ownedShopCount = await countOwnedActiveShops(uid);
-    if (ownedShopCount >= maxShops) {
-      await navigateTo({
-        path: '/dashboard/subscriptions',
-        query: {
-          upgradeReason: 'shop-limit',
-          planId,
-          maxShops: String(maxShops),
-        },
-      });
-      return;
+    const subscriptionsEnabled = false;
+    if (subscriptionsEnabled) {
+      const planId = await resolveCurrentPlanId(uid);
+      const maxShops = SHOP_LIMITS_BY_PLAN[planId] || SHOP_LIMITS_BY_PLAN.free;
+      const ownedShopCount = await countOwnedActiveShops(uid);
+      if (ownedShopCount >= maxShops) {
+        await navigateTo({
+          path: '/dashboard/subscriptions',
+          query: {
+            upgradeReason: 'shop-limit',
+            planId,
+            maxShops: String(maxShops),
+          },
+        });
+        return;
+      }
     }
   }
 
@@ -819,6 +851,7 @@ const save = async () => {
 
     let uploadedPermitUrl = permitUploadUrl.value;
     let uploadedPermitPath = permitUploadPath.value;
+    let uploadedPermitType = permitUploadType.value;
 
     if (permitFile.value) {
       const storage = nuxtApp.$firebase?.storage;
@@ -831,6 +864,7 @@ const save = async () => {
       await uploadBytes(fileRef, permitFile.value);
       uploadedPermitUrl = await getDownloadURL(fileRef);
       uploadedPermitPath = path;
+      uploadedPermitType = permitFile.value.type;
     }
 
     const payload = {
@@ -843,7 +877,7 @@ const save = async () => {
       logo: form.logo.trim(),
       businessPermitUrl: uploadedPermitUrl || null,
       businessPermitPath: uploadedPermitPath || null,
-      businessPermitType: permitFile.value?.type || null,
+      businessPermitType: uploadedPermitType || null,
       isActive: isSuperAdmin.value ? form.isActive : false,
       updatedAt: serverTimestamp(),
     };
@@ -1090,6 +1124,13 @@ onMounted(() => {
 .field.check { flex-direction: row; align-items: center; }
 .detect-location-btn { justify-content: center; }
 .upload-meta { font-size: 12px; color: #64748b; }
+.permit-preview { display: inline-flex; align-items: center; gap: 10px; width: fit-content; padding: 6px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; color: #0f766e; font-size: 12px; font-weight: 700; cursor: zoom-in; }
+.permit-preview img { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; }
+.permit-preview:hover { border-color: #0f766e; background: #f0fdfa; }
+.permit-viewer { width: min(960px, 100%); max-height: calc(100vh - 40px); background: #fff; border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,0.2); overflow: hidden; display: flex; flex-direction: column; }
+.permit-viewer-body { display: flex; align-items: center; justify-content: center; min-height: 0; padding: 20px; overflow: auto; background: #f8fafc; }
+.permit-viewer-body img { display: block; max-width: 100%; max-height: calc(100vh - 160px); object-fit: contain; cursor: zoom-in; transform-origin: center; transition: transform 0.2s ease; }
+.permit-viewer-body img:hover { transform: scale(1.5); cursor: zoom-out; }
 .checkbox { display: flex; align-items: center; gap: 8px; font-weight: 600; color: #0f172a; text-transform: none; cursor: pointer; }
 .error { margin-top: 12px; font-size: 13px; color: #dc2626; background: #fef2f2; padding: 10px 12px; border-radius: 10px; }
 .member-add-row { display: flex; gap: 10px; align-items: center; }
@@ -1124,6 +1165,8 @@ onMounted(() => {
   .modal-header { padding: 16px; }
   .modal-body { padding: 16px; }
   .modal-footer { padding: 14px 16px 16px; }
+  .permit-viewer { max-height: calc(100vh - 20px); }
+  .permit-viewer-body { padding: 12px; }
   .member-add-row { align-items: stretch; flex-direction: column; }
   .member-role { max-width: none; }
   .product-item { align-items: flex-start; gap: 12px; }

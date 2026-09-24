@@ -80,7 +80,8 @@ const loadChat = async () => {
     return;
   }
 
-  const fetchedChat = { id: chatDoc.id, ...chatDoc.data() } as Chat;
+  const fetchedChatData = chatDoc.data() as Record<string, any>;
+  const fetchedChat = { id: chatDoc.id, ...fetchedChatData } as Chat;
   if (fetchedChat.userId !== authStore.user?.uid) {
     loadError.value = 'You do not have permission to view this chat.';
     loading.value = false;
@@ -93,7 +94,8 @@ const loadChat = async () => {
     try {
       const productDoc = await getDoc(doc(db, 'products', chat.value.productId));
       if (productDoc.exists()) {
-        product.value = { id: productDoc.id, ...productDoc.data() } as Product;
+        const productData = productDoc.data() as Record<string, any>;
+        product.value = { id: productDoc.id, ...productData } as Product;
       }
     } catch (error: any) {
       handleFirestoreError(error, `products/${chat.value.productId}`);
@@ -106,7 +108,8 @@ const loadChat = async () => {
     try {
       const shopDoc = await getDoc(doc(db, 'shops', chat.value.shopId));
       if (shopDoc.exists()) {
-        shop.value = { id: shopDoc.id, ...shopDoc.data() } as Shop;
+        const shopData = shopDoc.data() as Record<string, any>;
+        shop.value = { id: shopDoc.id, ...shopData } as Shop;
       }
     } catch (error: any) {
       handleFirestoreError(error, `shops/${chat.value.shopId}`);
@@ -119,7 +122,10 @@ const loadChat = async () => {
     const messagesRef = collection(db, 'chats', chatId, 'messages');
     const messagesQuery = query(messagesRef, orderBy('createdAt', 'asc'));
     const snapshot = await getDocs(messagesQuery);
-    messages.value = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as ChatMessage));
+    messages.value = snapshot.docs.map((messageDoc) => ({
+      id: messageDoc.id,
+      ...(messageDoc.data() as Record<string, any>),
+    } as ChatMessage));
   } catch (error: any) {
     handleFirestoreError(error, `chats/${chatId}/messages`);
     loading.value = false;
