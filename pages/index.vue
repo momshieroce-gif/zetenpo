@@ -199,7 +199,7 @@ const year = new Date().getFullYear();
     <footer class="foot">
       <div class="wrap foot-in">
         <a href="#top" class="brand dark"><img src="/icon.png" alt="" width="30" height="30" class="app-icon" /><span>My Near Shops</span></a>
-        <p>&copy; {{ year }} My Near Shops. Local shops. Better days.</p>
+        <p>&copy; {{ year }} My Near Shops. Local shops. Better days. · <NuxtLink to="/privacy">Privacy Policy</NuxtLink> · <NuxtLink to="/terms">Terms of Service</NuxtLink></p>
       </div>
     </footer>
   </div>
