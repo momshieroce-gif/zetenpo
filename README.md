@@ -74,6 +74,12 @@ For Android builds, set `NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN` to the Firebase-hoste
 
 | Variable | Description |
 | --- | --- |
+| `NUXT_SMTP_HOST` | SMTP server hostname for inquiry emails |
+| `NUXT_SMTP_PORT` | SMTP port, typically `587` or `465` |
+| `NUXT_SMTP_USER` | SMTP account username |
+| `NUXT_SMTP_PASS` | SMTP account password or provider-issued app password |
+| `NUXT_INQUIRY_TO` | Address that receives inquiry emails |
+| `NUXT_INQUIRY_FROM` | Sender address authorized by the SMTP provider; defaults to the SMTP username |
 | `NUXT_PUBLIC_FIREBASE_API_KEY` | Firebase Web API key |
 | `NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Production auth domain. Use `mynearshops.com`, whose `/__/auth/*` routes proxy to Firebase Hosting |
 | `NUXT_PUBLIC_FIREBASE_PROJECT_ID` | Firebase project ID |
@@ -83,6 +89,14 @@ For Android builds, set `NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN` to the Firebase-hoste
 | `NUXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | Optional Firebase Analytics ID |
 | `NUXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Google Maps JavaScript API key |
 | `NUXT_PUBLIC_GOOGLE_MAPS_ID` | Optional cloud map ID |
+
+The inquiry form requires an SMTP provider. Set the server-side `NUXT_SMTP_*`
+and `NUXT_INQUIRY_*` values in the production hosting environment and restart
+or redeploy the app. Use the hosting provider's secret management for the SMTP
+password; do not commit credentials or put them in `NUXT_PUBLIC_*` variables.
+For local development, set these values in `.env` and restart the dev server.
+The older unprefixed `SMTP_*` and `INQUIRY_*` values are read while Nuxt loads
+its configuration, but the `NUXT_*` names also work as runtime overrides.
 
 ## Project Structure
 
