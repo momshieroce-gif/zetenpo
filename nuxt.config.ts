@@ -4,6 +4,9 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   telemetry: { enabled: false },
   ssr: !isCapacitorBuild,
+  routeRules: {
+    '/pages/index.vue': { redirect: '/' },
+  },
   modules: ['@pinia/nuxt'],
   runtimeConfig: {
     smtpHost: process.env.SMTP_HOST || '',

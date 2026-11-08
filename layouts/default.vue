@@ -32,41 +32,6 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 1.9-1.4L21 8H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="20" r="1.5" fill="currentColor"/><circle cx="18" cy="20" r="1.5" fill="currentColor"/></svg>
             <span v-if="cartCount > 0" class="icon-badge">{{ cartCount }}</span>
           </button>
-          <template v-if="!authStore.isLoggedIn">
-            <NuxtLink to="/login" class="btn btn-ghost">Login</NuxtLink>
-            <NuxtLink to="/login" class="btn btn-primary">Get Started</NuxtLink>
-          </template>
-          <template v-else>
-           
-            <div class="user-menu-wrapper" ref="userMenuRef">
-              <button class="user-info-section" @click="toggleUserMenu">
-                <div class="user-avatar">{{ initials }}</div>
-                <div class="user-details">
-                  <div class="user-name">{{ authStore.displayName || 'User' }}</div>
-                  <div class="user-role">{{ authStore.user?.role || 'Member' }}</div>
-                </div>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" class="expand-icon" :class="{ open: userMenuOpen }"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z" fill="currentColor"/></svg>
-              </button>
-              <div v-if="userMenuOpen" class="user-menu">
-                <div class="user-menu-header">
-                  <div class="user-menu-info">
-                    <div class="user-menu-name">{{ authStore.displayName || 'User' }}</div>
-                    <div class="user-menu-email">{{ authStore.user?.email || '' }}</div>
-                  </div>
-                </div>
-                <div class="user-menu-divider"></div>
-                <NuxtLink to="/dashboard" class="user-menu-item" @click="userMenuOpen = false">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" fill="currentColor"/></svg>
-                  <span>Dashboard</span>
-                </NuxtLink>
-                <div class="user-menu-divider"></div>
-                <button class="user-menu-item logout-item" @click="userMenuOpen = false; handleLogout()">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" fill="currentColor"/></svg>
-                  <span>Logout</span>
-                </button>
-              </div>
-            </div>
-          </template>
         </div>
       </div>
     </header>
@@ -86,75 +51,16 @@
           <NuxtLink to="/" class="footer-link">Home</NuxtLink>
           <NuxtLink to="/find-shops" class="footer-link">Find Shops</NuxtLink>
           <NuxtLink to="/find-items" class="footer-link">Find Items</NuxtLink>
-          <NuxtLink to="/login" class="footer-link">Login</NuxtLink>
         </div>
         <p class="footer-copy">&copy; {{ new Date().getFullYear() }} My Near Shops. All rights reserved.</p>
       </div>
     </footer>
 
-    <div v-if="showLogoutDialog" class="logout-dialog-overlay" @click.self="showLogoutDialog = false">
-      <div class="logout-dialog-card">
-        <div class="logout-dialog-glow"></div>
-        <div class="logout-dialog-header">
-          <div class="logout-dialog-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" fill="currentColor"/></svg>
-          </div>
-          <div class="logout-dialog-title">Sign Out?</div>
-          <button class="logout-dialog-close" @click="showLogoutDialog = false" aria-label="Close">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg>
-          </button>
-        </div>
-        <div class="logout-dialog-body">
-          <div class="logout-dialog-text">Are you sure you want to sign out of your account?</div>
-        </div>
-        <div class="logout-dialog-actions">
-          <button class="btn cancel-btn" @click="showLogoutDialog = false">Cancel</button>
-          <button class="btn confirm-btn" @click="confirmLogout">Sign Out</button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { signOut } from 'firebase/auth';
-
-const authStore = useAuthStore();
-const { $firebase } = useNuxtApp() as any;
-const userMenuOpen = ref(false);
-const userMenuRef = ref<HTMLElement | null>(null);
-const showLogoutDialog = ref(false);
 const { cartCount } = useCart();
-
-const initials = computed(() => {
-  const name = authStore.displayName || 'U';
-  return name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
-});
-
-const toggleUserMenu = () => { userMenuOpen.value = !userMenuOpen.value; };
-
-const handleLogout = () => { showLogoutDialog.value = true; };
-
-const confirmLogout = async () => {
-  try {
-    await signOut($firebase.auth);
-    authStore.logout();
-    showLogoutDialog.value = false;
-    await navigateTo('/');
-  } catch {
-    // ignore
-  }
-};
-
-const onClickOutside = (event: MouseEvent) => {
-  if (userMenuRef.value && !userMenuRef.value.contains(event.target as Node)) {
-    userMenuOpen.value = false;
-  }
-};
-
-onMounted(() => { document.addEventListener('click', onClickOutside); });
-onUnmounted(() => { document.removeEventListener('click', onClickOutside); });
 </script>
 
 <style scoped>

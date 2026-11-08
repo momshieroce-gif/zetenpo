@@ -7,8 +7,6 @@ A Nuxt 3 server-side rendered web app for discovering nearby local shops and pro
 - **SSR landing page** with `useHead` SEO meta tags
 - **Pink theme** inspired by the ecommerce-web reference
 - **Find Shops / Find Items** live map search with geolocation and radius filter
-- **Firebase Authentication** (email/password + Google sign-in)
-- **Dashboard** shell with role-aware layout
 - **Firestore schema** for users, roles, shops, and products
 
 ## Tech Stack
@@ -72,8 +70,6 @@ After changing Vue, Nuxt, or web assets, run `npm run android:sync` again before
 
 For Android builds, set `NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN` to the Firebase-hosted domain (for example, `<project-id>.firebaseapp.com`) because the packaged app cannot use this repository's Nuxt server proxy routes. Add the relevant domain in Firebase Authentication settings and configure the Google Maps API key for Android/WebView use.
 
-Email/password authentication works through the Firebase web SDK. Google login currently uses `signInWithPopup`, which is not reliable in an Android WebView; native Google authentication or a redirect/deep-link flow is required before relying on Google login in the Android release.
-
 ## Environment Variables
 
 | Variable | Description |
@@ -98,19 +94,13 @@ mynearshops/
 ├── layouts/
 │   ├── default.vue          # Site header + footer
 │   └── dashboard.vue        # Dashboard sidebar layout
-├── middleware/
-│   └── auth.ts              # Client-side auth guard
 ├── pages/
 │   ├── index.vue            # Landing page (SSR)
 │   ├── find-shops.vue       # Map shop search
 │   ├── find-items.vue       # Map item search
-│   ├── login.vue            # Email/password + Google login
-│   └── dashboard.vue        # Dashboard home
 ├── plugins/
 │   └── firebase.client.ts   # Firebase app/auth/db init
 ├── server/                  # Nuxt server routes (future API)
-├── stores/
-│   └── auth.ts              # Pinia auth store
 ├── types/
 │   └── index.ts             # Shared TypeScript interfaces
 ├── nuxt.config.ts
@@ -120,15 +110,13 @@ mynearshops/
 ## Pages
 
 - `/` — Landing page with hero, stats, features, and CTA
+- `/pages/index.vue` — Redirects to the landing page at `/`
 - `/find-shops` — Search nearby shops by location/name on Google Maps
 - `/find-items` — Search nearby products on Google Maps
-- `/login` — Authenticate with email/password or Google
-- `/dashboard` — Protected dashboard with quick stats
 
 ## Notes
 
 - The map pages render client-only inside `<ClientOnly>` to avoid SSR issues with the Google Maps JS API.
-- The dashboard route uses a client-only auth middleware because Firebase session restoration happens in the browser.
 - `useHead` is used on every public page for SEO.
 - Add every production app hostname to Firebase Console > Authentication > Settings > Authorized domains. The server routes under `server/routes/__/` proxy Firebase's reserved auth helpers, allowing `NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN=mynearshops.com` in production.
 
