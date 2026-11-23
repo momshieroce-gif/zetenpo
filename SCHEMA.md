@@ -2,6 +2,23 @@
 
 Firestore is a NoSQL document store. The app uses the following top-level collections. Each document uses `createdAt` and `updatedAt` server timestamps.
 
+## `customerInquiries`
+
+Inquiries submitted through the landing page are written by the server, not directly by the client.
+
+```ts
+interface CustomerInquiry {
+  name: string;
+  email: string;
+  phone: string;
+  topic: string;
+  title: string;
+  message: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+```
+
 ## `roles`
 
 Global role definitions used to authorize users.

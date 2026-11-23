@@ -36,18 +36,23 @@ const faqs = [
 const openFaq = ref<number | null>(0);
 
 const topics = ['General question', 'List my shop', 'Partnership', 'Support', 'Feedback'];
-const form = reactive({ name: '', email: '', phone: '', topic: topics[0], message: '', website: '' });
+const form = reactive({ name: '', email: '', phone: '', topic: topics[0], title: '', message: '', website: '' });
 const status = ref<'idle' | 'sending' | 'sent' | 'error'>('idle');
 const errorMsg = ref('');
+const notificationWarning = ref('');
 
 async function submit() {
   if (status.value === 'sending') return;
   status.value = 'sending';
   errorMsg.value = '';
+  notificationWarning.value = '';
   try {
-    await $fetch('/api/inquiry', { method: 'POST', body: form });
+    const result = await $fetch('/api/inquiry', { method: 'POST', body: form });
+    if (!result.emailSent) {
+      notificationWarning.value = 'Your inquiry was saved, but the email notification could not be sent.';
+    }
     status.value = 'sent';
-    Object.assign(form, { name: '', email: '', phone: '', topic: topics[0], message: '', website: '' });
+    Object.assign(form, { name: '', email: '', phone: '', topic: topics[0], title: '', message: '', website: '' });
   } catch (e: any) {
     errorMsg.value = e?.data?.statusMessage || 'Something went wrong. Please try again.';
     status.value = 'error';
@@ -173,7 +178,8 @@ const year = new Date().getFullYear();
           </div>
           <form class="inq-form" @submit.prevent="submit">
             <div v-if="status === 'sent'" class="ok" role="status">
-              <b>Thank you!</b> Your inquiry was sent. We’ll be in touch soon.
+              <template v-if="notificationWarning">{{ notificationWarning }}</template>
+              <template v-else><b>Thank you!</b> Your inquiry was sent. We’ll be in touch soon.</template>
             </div>
             <template v-else>
               <div class="row">
@@ -186,6 +192,7 @@ const year = new Date().getFullYear();
                   <select v-model="form.topic"><option v-for="t in topics" :key="t">{{ t }}</option></select>
                 </label>
               </div>
+              <label>Title *<input v-model="form.title" required maxlength="200" /></label>
               <label>Message *<textarea v-model="form.message" required minlength="10" maxlength="3000" rows="5" placeholder="How can we help?" /></label>
               <input v-model="form.website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true" />
               <p v-if="status === 'error'" class="err" role="alert">{{ errorMsg }}</p>

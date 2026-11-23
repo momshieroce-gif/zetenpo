@@ -90,13 +90,24 @@ For Android builds, set `NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN` to the Firebase-hoste
 | `NUXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Google Maps JavaScript API key |
 | `NUXT_PUBLIC_GOOGLE_MAPS_ID` | Optional cloud map ID |
 
-The inquiry form requires an SMTP provider. Set the server-side `NUXT_SMTP_*`
+The inquiry API saves submissions in the `customerInquiries` Firestore collection
+using Firebase Admin and Application Default Credentials. Configure the server
+with credentials that can write to the Firebase project identified by
+`NUXT_PUBLIC_FIREBASE_PROJECT_ID` (for local development, set
+`GOOGLE_APPLICATION_CREDENTIALS` to a service account key outside the repository).
+Admin SDK writes bypass Firestore security rules; do not make inquiry documents
+publicly readable or writable. The API requires a running Nuxt server and is not
+available in a static-only deployment.
+
+To receive inquiry email notifications, set the server-side `NUXT_SMTP_*`
 and `NUXT_INQUIRY_*` values in the production hosting environment and restart
 or redeploy the app. Use the hosting provider's secret management for the SMTP
 password; do not commit credentials or put them in `NUXT_PUBLIC_*` variables.
 For local development, set these values in `.env` and restart the dev server.
 The older unprefixed `SMTP_*` and `INQUIRY_*` values are read while Nuxt loads
 its configuration, but the `NUXT_*` names also work as runtime overrides.
+If email is unavailable, the inquiry remains saved and the form reports that
+the notification could not be sent.
 
 ## Project Structure
 
